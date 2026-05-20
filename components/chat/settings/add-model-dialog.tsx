@@ -30,13 +30,13 @@ export const AddModelDialog = ({ provider, onClose }: AddModelDialogProps) => {
   useEffect(() => {
     const loadModels = async () => {
       const apiKey = apiKeys[provider.name] || apiKeys[provider.id]
-      if (!apiKey || !provider.baseUrl) {
+      if ((!apiKey && provider.transport !== 'codex_bridge') || !provider.baseUrl) {
         return
       }
 
       setIsLoadingModels(true)
       try {
-        const models = await fetchProviderModels(provider.baseUrl, apiKey)
+        const models = await fetchProviderModels(provider.baseUrl, apiKey || "", provider.transport)
         setAvailableModels(models)
         setFilteredModels(models)
       } catch (error) {

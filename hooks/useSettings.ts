@@ -23,8 +23,10 @@ import {
   toggleProviderEnabled,
   setProviderEnabled,
   setModelTemperature,
-  setMaxTokens
+  setMaxTokens,
+  setCodexReasoningEffort
 } from "~store/slices/settings.slice"
+import type { CodexReasoningEffort } from "~store/types"
 
 export const useSettings = () => {
   const dispatch = useDispatch<AppDispatch>()
@@ -42,7 +44,8 @@ export const useSettings = () => {
     settingsCategory = "model-service",
     enabledProviders = {},
     modelTemperature = 0.36,
-    maxTokens = 16384
+    maxTokens = 16384,
+    codexReasoningEffort = "medium"
   } = settingsState || {}
 
   // 初始化设置 - 使用新的供应商配置系统
@@ -64,6 +67,7 @@ export const useSettings = () => {
       { name: 'OpenAI', baseUrl: 'https://api.openai.com/v1' },
       { name: 'Gemini', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai' },
       { name: 'Anthropic', baseUrl: 'https://api.anthropic.com/v1' },
+      { name: 'ChatGPT Pro (Codex)', baseUrl: 'http://127.0.0.1:17381' },
     ]
 
     builtinProviders.forEach(provider => {
@@ -85,6 +89,9 @@ export const useSettings = () => {
   // 检查模型是否可用（有 API key 和 base URL）
   const isModelAvailable = (model: ModelConfig): boolean => {
     const config = getModelConfig(model)
+    if (config.transport === 'codex_bridge') {
+      return !!config.base_url
+    }
     const available = !!(config.api_key && config.base_url)
 
     return available
@@ -109,6 +116,7 @@ export const useSettings = () => {
     enabledProviders,
     modelTemperature,
     maxTokens,
+    codexReasoningEffort,
 
     // 方法
     setApiKey: (provider: string, apiKey: string) =>
@@ -144,6 +152,8 @@ export const useSettings = () => {
       dispatch(setModelTemperature(value)),
     setMaxTokens: (value: number) =>
       dispatch(setMaxTokens(value)),
+    setCodexReasoningEffort: (value: CodexReasoningEffort) =>
+      dispatch(setCodexReasoningEffort(value)),
     isProviderEnabled,
     initializeSettings,
     getModelConfig,

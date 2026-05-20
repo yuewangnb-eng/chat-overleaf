@@ -63,7 +63,13 @@ export const useMessageHandler = ({
   const [isStreaming, setIsStreaming] = useState(false)
   const [abortController, setAbortController] = useState<AbortController | null>(null)
   
-  const { getModelConfig, selectedModel, modelTemperature, maxTokens } = useSettings()
+  const {
+    getModelConfig,
+    selectedModel,
+    modelTemperature,
+    maxTokens,
+    codexReasoningEffort
+  } = useSettings()
   const { allModels } = useModels()
   const { error } = useToast()
 
@@ -87,8 +93,9 @@ export const useMessageHandler = ({
     // 每次发送消息时重新获取最新的模型配置
     const currentModelConfig = getModelConfig(currentModel)
 
-    // 检查当前模型是否可用
-    if (!currentModelConfig.api_key || !currentModelConfig.base_url) {
+    // 检查当前模型是否可用。Codex Bridge 使用本地登录态，不需要 API Key。
+    const usesCodexBridge = currentModelConfig.transport === 'codex_bridge'
+    if ((!usesCodexBridge && !currentModelConfig.api_key) || !currentModelConfig.base_url) {
       error(`当前模型 ${currentModel.display_name} 未配置 API Key 或 Base URL，请在设置中配置后再使用。`, {
         title: '配置错误'
       })
@@ -99,12 +106,13 @@ export const useMessageHandler = ({
     llmService.updateModel(currentModelConfig)
     llmService.updateGenerationParams({
       temperature: modelTemperature,
-      maxTokens
+      maxTokens,
+      codexReasoningEffort
     })
 
     // 调试信息
     console.log('Sending message with model:', currentModelConfig.display_name)
-    console.log('API Key available:', !!currentModelConfig.api_key)
+    console.log('API Key available:', usesCodexBridge ? 'not required' : !!currentModelConfig.api_key)
     console.log('Base URL:', currentModelConfig.base_url)
 
     const userMessage: Message = {

@@ -204,10 +204,16 @@ export const SidebarChat = forwardRef<SidebarChatHandle, SidebarChatProps>(({ on
 
   // 初始化选中的模型（如果还没有选择的话）
   useEffect(() => {
-    if (!selectedModel && allModels.length > 0) {
-      // 优先选择默认模型，如果找不到则选择第一个可用模型
-      const defaultModel = allModels.find(m => m.id === "硅基流动::moonshotai/Kimi-K2-Instruct") || allModels[0]
-      setSelectedModel(defaultModel)
+    if (allModels.length > 0) {
+      const selectedModelExists = selectedModel?.id
+        ? allModels.some(model => model.id === selectedModel.id)
+        : false
+
+      if (!selectedModel || !selectedModelExists) {
+        // 优先选择默认模型，如果找不到则选择第一个可用模型
+        const defaultModel = allModels.find(m => m.id === "硅基流动::moonshotai/Kimi-K2-Instruct") || allModels[0]
+        setSelectedModel(defaultModel)
+      }
     }
   }, [selectedModel, setSelectedModel, allModels])
 

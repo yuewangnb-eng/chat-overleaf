@@ -4,6 +4,7 @@ import { Input } from "~components/ui/input"
 import { Label } from "~components/ui/label"
 import { useSettings } from "~hooks/useSettings"
 import { cn } from "~lib/utils"
+import type { CodexReasoningEffort } from "~store/types"
 
 const temperaturePresets = [
   { label: "精准", value: 0.2, hint: "更保守，适合代码/公式" },
@@ -11,12 +12,25 @@ const temperaturePresets = [
   { label: "创意", value: 1.0, hint: "更发散的回答" }
 ]
 
+const codexReasoningPresets: Array<{
+  label: string
+  value: CodexReasoningEffort
+  hint: string
+}> = [
+  { label: "low", value: "low", hint: "Fastest" },
+  { label: "medium", value: "medium", hint: "Default" },
+  { label: "high", value: "high", hint: "Deeper" },
+  { label: "xhigh", value: "xhigh", hint: "Deepest" }
+]
+
 export const ModelParamsSettings = () => {
   const {
     modelTemperature,
     maxTokens,
+    codexReasoningEffort,
     setModelTemperature,
-    setMaxTokens
+    setMaxTokens,
+    setCodexReasoningEffort
   } = useSettings()
 
   const [localTemp, setLocalTemp] = useState(modelTemperature ?? 0.36)
@@ -51,6 +65,36 @@ export const ModelParamsSettings = () => {
           <p className="text-sm text-gray-500 mt-1">
             自定义模型生成的温度与最大回复长度，实时生效。
           </p>
+        </div>
+
+        {/* Codex reasoning effort */}
+        <div className="border border-gray-200 rounded-lg p-4 shadow-sm bg-white">
+          <div className="mb-3">
+            <Label className="text-sm font-medium text-gray-800">Codex reasoning effort</Label>
+            <p className="text-xs text-gray-500 mt-1">
+              Used only by ChatGPT Pro (Codex) through the local bridge.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {codexReasoningPresets.map((preset) => (
+              <Button
+                key={preset.value}
+                variant="outline"
+                size="sm"
+                onClick={() => setCodexReasoningEffort(preset.value)}
+                className={cn(
+                  "h-auto justify-start py-2",
+                  codexReasoningEffort === preset.value && "border-blue-500 text-blue-600 bg-blue-50"
+                )}
+              >
+                <div className="flex flex-col items-start leading-tight">
+                  <span className="text-xs font-semibold">{preset.label}</span>
+                  <span className="text-[11px] text-gray-500">{preset.hint}</span>
+                </div>
+              </Button>
+            ))}
+          </div>
         </div>
 
         {/* 温度设置 */}

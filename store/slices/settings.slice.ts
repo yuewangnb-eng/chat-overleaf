@@ -1,5 +1,5 @@
 import { createSlice, type PayloadAction } from "@reduxjs/toolkit"
-import type { SettingsState, CustomProvider, CustomModel } from "../types"
+import type { CodexReasoningEffort, SettingsState, CustomProvider, CustomModel } from "../types"
 import type { ModelConfig } from "~lib/builtin-models"
 
 const initialState: SettingsState = {
@@ -13,7 +13,8 @@ const initialState: SettingsState = {
   settingsCategory: "model-service",
   enabledProviders: {},
   modelTemperature: 0.36,
-  maxTokens: 16384
+  maxTokens: 16384,
+  codexReasoningEffort: "medium"
 }
 
 const settingsSlice = createSlice({
@@ -63,6 +64,7 @@ const settingsSlice = createSlice({
       state.enabledProviders = {}
       state.modelTemperature = 0.36
       state.maxTokens = 16384
+      state.codexReasoningEffort = "medium"
     },
 
     // 设置当前设置分类
@@ -182,6 +184,11 @@ const settingsSlice = createSlice({
       const value = action.payload
       // 约束范围 256 - 32768，默认 16384
       state.maxTokens = Math.min(32768, Math.max(256, Math.floor(value)))
+    },
+
+    // 设置 Codex 推理强度
+    setCodexReasoningEffort: (state, action: PayloadAction<CodexReasoningEffort>) => {
+      state.codexReasoningEffort = action.payload
     }
   }
 })
@@ -206,7 +213,8 @@ export const {
   toggleProviderEnabled,
   setProviderEnabled,
   setModelTemperature,
-  setMaxTokens
+  setMaxTokens,
+  setCodexReasoningEffort
 } = settingsSlice.actions
 
 export default settingsSlice.reducer

@@ -135,6 +135,44 @@ pnpm build
 
 ---
 
+## ChatGPT Pro / Codex Bridge
+
+本分支新增了 `ChatGPT Pro (Codex)` 供应商。它不使用 OpenAI API Key，而是通过本地 Codex CLI 的 `codex app-server` 复用你的 ChatGPT Plus/Pro 登录态。
+
+### 使用步骤
+
+1. 安装 Codex CLI：
+
+   ```bash
+   npm install -g @openai/codex
+   ```
+
+2. 登录 ChatGPT 账号：
+
+   ```bash
+   codex login
+   ```
+
+3. 启动本地 bridge：
+
+   ```bash
+   pnpm bridge
+   ```
+
+4. 启动扩展开发服务：
+
+   ```bash
+   pnpm dev
+   ```
+
+5. 在扩展设置中选择 `ChatGPT Pro (Codex)`，使用内置的 `GPT-5.4 (Codex)` 或 `GPT-5.5 (Codex)` 模型。也可以在该供应商下点击“添加模型”，模型列表会从本地 Codex 缓存自动读取。
+
+6. 在“对话参数”中设置 `Codex reasoning effort`，可选 `low`、`medium`、`high`、`xhigh`。该参数只会通过本地 bridge 传给 Codex，不影响普通 API 模型。
+
+默认 bridge 地址为 `http://127.0.0.1:17381`。如需修改端口，可设置环境变量 `OVERLEAFGPT_CODEX_BRIDGE_PORT`。
+
+---
+
 ## 📋 TODO
 
 - [x] ✍️ 支持添加编辑器选中内容对话

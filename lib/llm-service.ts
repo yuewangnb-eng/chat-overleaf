@@ -1,5 +1,6 @@
 import type { ModelConfig } from './builtin-models'
 import { ApiClient } from './api-client'
+import type { CodexReasoningEffort } from '~store/types'
 
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'system'
@@ -25,14 +26,19 @@ export interface StreamResponse {
 export class LLMService {
   private apiClient: ApiClient
   private model: ModelConfig
-  private generationParams: { temperature: number; maxTokens: number }
+  private generationParams: {
+    temperature: number
+    maxTokens: number
+    codexReasoningEffort: CodexReasoningEffort
+  }
 
   constructor(model: ModelConfig) {
     this.model = model
     this.apiClient = new ApiClient(model)
     this.generationParams = {
       temperature: 0.36,
-      maxTokens: 16384
+      maxTokens: 16384,
+      codexReasoningEffort: 'medium'
     }
   }
 
@@ -43,12 +49,19 @@ export class LLMService {
   }
 
   // 更新生成参数（温度、最大 tokens）
-  updateGenerationParams(params: { temperature?: number; maxTokens?: number }) {
+  updateGenerationParams(params: {
+    temperature?: number
+    maxTokens?: number
+    codexReasoningEffort?: CodexReasoningEffort
+  }) {
     if (params.temperature !== undefined) {
       this.generationParams.temperature = params.temperature
     }
     if (params.maxTokens !== undefined) {
       this.generationParams.maxTokens = params.maxTokens
+    }
+    if (params.codexReasoningEffort !== undefined) {
+      this.generationParams.codexReasoningEffort = params.codexReasoningEffort
     }
   }
 
@@ -65,7 +78,8 @@ export class LLMService {
         abortSignal,
         {
           temperature: this.generationParams.temperature,
-          maxTokens: this.generationParams.maxTokens
+          maxTokens: this.generationParams.maxTokens,
+          codexReasoningEffort: this.generationParams.codexReasoningEffort
         }
       )
 
@@ -110,7 +124,8 @@ export class LLMService {
         undefined,
         {
           temperature: this.generationParams.temperature,
-          maxTokens: this.generationParams.maxTokens
+          maxTokens: this.generationParams.maxTokens,
+          codexReasoningEffort: this.generationParams.codexReasoningEffort
         }
       )
 

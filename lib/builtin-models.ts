@@ -9,6 +9,7 @@ export interface BaseModelConfig {
   image_resolution_threshold?: number
   // API格式类型
   api_format?: 'openai' | 'gemini' | 'claude'
+  transport?: 'openai_chat' | 'codex_bridge'
 }
 
 // 完整模型配置接口（包含运行时配置）
@@ -19,6 +20,21 @@ export interface ModelConfig extends BaseModelConfig {
 
 // 内置模型配置 - 只包含模型基本信息，运行时配置通过供应商获取
 export const builtinModels: BaseModelConfig[] = [
+  {
+    model_name: "gpt-5.4",
+    display_name: "GPT-5.4 (Codex)",
+    provider: "ChatGPT Pro (Codex)",
+    multimodal: true,
+    transport: "codex_bridge",
+  },
+  {
+    model_name: "gpt-5.5",
+    display_name: "GPT-5.5 (Codex)",
+    provider: "ChatGPT Pro (Codex)",
+    multimodal: true,
+    transport: "codex_bridge",
+  },
+
   // 硅基流动模型
   // {
   //   model_name: "moonshotai/Kimi-K2-Instruct",

@@ -7,7 +7,8 @@
   "scripts": {
     "dev": "plasmo dev",
     "build": "plasmo build",
-    "package": "plasmo package"
+    "package": "plasmo package",
+    "bridge": "node bridge/codex-bridge.mjs"
   },
   "dependencies": {
     "@plasmohq/redux-persist": "^6.1.0",
@@ -50,7 +51,11 @@
   "manifest": {
     "host_permissions": [
       "https://www.overleaf.com/*",
-      "https://*.overleaf.com/*"
+      "https://*.overleaf.com/*",
+      "http://127.0.0.1/*",
+      "http://localhost/*",
+      "http://127.0.0.1:17381/*",
+      "http://localhost:17381/*"
     ]
   }
 }

@@ -189,43 +189,54 @@ export const ModelServiceSettings = () => {
             </div>
 
             {/* API Key 配置 */}
-            <div className="p-4 border-b border-gray-200">
-              <label className="text-sm font-medium text-gray-700 mb-2 block">
-                API Key
-              </label>
-              <div className="flex gap-2">
-                <div className="relative flex-1">
-                  <Input
-                    type={showApiKeys[currentProvider.id] ? "text" : "password"}
-                    value={localApiKeys[currentProvider.id] || apiKeys[currentProvider.name] || ""}
-                    onChange={(e) => handleApiKeyChange(currentProvider.id, e.target.value)}
-                    placeholder="输入 API Key"
-                    className="pr-10"
-                    autoComplete="off"
-                    data-form-type="other"
-                  />
+            {currentProvider.transport === "codex_bridge" ? (
+              <div className="p-4 border-b border-gray-200">
+                <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
+                  <div className="font-medium">使用本地 Codex Bridge</div>
+                  <div className="mt-1 text-xs leading-relaxed">
+                    该供应商使用 `codex login` 后的本地 ChatGPT Plus/Pro 登录态，不需要 API Key。请先在本机运行 `pnpm bridge`。
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="p-4 border-b border-gray-200">
+                <label className="text-sm font-medium text-gray-700 mb-2 block">
+                  API Key
+                </label>
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Input
+                      type={showApiKeys[currentProvider.id] ? "text" : "password"}
+                      value={localApiKeys[currentProvider.id] || apiKeys[currentProvider.name] || ""}
+                      onChange={(e) => handleApiKeyChange(currentProvider.id, e.target.value)}
+                      placeholder="输入 API Key"
+                      className="pr-10"
+                      autoComplete="off"
+                      data-form-type="other"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="absolute right-1 top-1 h-8 w-8 p-0"
+                      onClick={() => toggleShowApiKey(currentProvider.id)}
+                    >
+                      {showApiKeys[currentProvider.id] ? (
+                        <EyeOff className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </div>
                   <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="absolute right-1 top-1 h-8 w-8 p-0"
-                    onClick={() => toggleShowApiKey(currentProvider.id)}
+                    onClick={() => handleApiKeySave(currentProvider.id)}
+                    disabled={localApiKeys[currentProvider.id] === apiKeys[currentProvider.name]}
                   >
-                    {showApiKeys[currentProvider.id] ? (
-                      <EyeOff className="h-4 w-4" />
-                    ) : (
-                      <Eye className="h-4 w-4" />
-                    )}
+                    保存
                   </Button>
                 </div>
-                <Button
-                  onClick={() => handleApiKeySave(currentProvider.id)}
-                  disabled={localApiKeys[currentProvider.id] === apiKeys[currentProvider.name]}
-                >
-                  保存
-                </Button>
               </div>
-            </div>
+            )}
 
             {/* 模型管理 */}
             <div className="flex-1 flex flex-col min-h-0">

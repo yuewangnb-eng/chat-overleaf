@@ -30,6 +30,7 @@ export interface CustomProvider {
   apiKeyLabel: string
   isCustom: boolean
   enabled?: boolean // 供应商是否启用，默认为true
+  transport?: 'openai_chat' | 'codex_bridge'
 }
 
 // 自定义模型配置
@@ -40,6 +41,8 @@ export interface CustomModel {
   providerId: string
   isCustom: boolean
 }
+
+export type CodexReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh'
 
 export interface SettingsState {
   apiKeys: Record<string, string>
@@ -55,4 +58,5 @@ export interface SettingsState {
   // 对话生成参数
   modelTemperature: number
   maxTokens: number
+  codexReasoningEffort: CodexReasoningEffort
 }

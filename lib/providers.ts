@@ -3,6 +3,15 @@ import type { CustomProvider } from "~store/types"
 // 内置供应商配置 - 固定的baseUrl配置
 export const builtinProviders: CustomProvider[] = [
   {
+    id: "codex-bridge",
+    name: "ChatGPT Pro (Codex)",
+    baseUrl: "http://127.0.0.1:17381",
+    apiKeyLabel: "Not required",
+    isCustom: false,
+    enabled: true,
+    transport: "codex_bridge"
+  },
+  {
     id: "yunwu",
     name: "云雾",
     baseUrl: "https://yunwu.ai/v1",

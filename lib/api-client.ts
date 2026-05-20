@@ -1,10 +1,12 @@
 import type { ModelConfig } from './builtin-models'
 import type { ChatMessage } from './llm-service'
+import type { CodexReasoningEffort } from '~store/types'
 
 interface ChatOptions {
   temperature?: number
   max_tokens?: number
   maxTokens?: number
+  codexReasoningEffort?: CodexReasoningEffort
 }
 
 /**
@@ -68,8 +70,53 @@ export class ApiClient {
     abortSignal?: AbortSignal,
     options?: ChatOptions
   ): Promise<Response> {
+    if (this.modelConfig.transport === 'codex_bridge') {
+      return this.sendCodexBridgeRequest(messages, stream, abortSignal, options)
+    }
+
     // 所有模型都使用OpenAI兼容格式
     return this.sendOpenAIRequest(messages, stream, abortSignal, options)
+  }
+
+  /**
+   * 发送到本地 Codex Bridge。Bridge 会启动/复用 `codex app-server`，
+   * 并返回 OpenAI Chat Completions 风格的 SSE，复用当前流式解析逻辑。
+   */
+  private async sendCodexBridgeRequest(
+    messages: ChatMessage[],
+    stream: boolean,
+    abortSignal?: AbortSignal,
+    options?: ChatOptions
+  ): Promise<Response> {
+    const headers = new Headers()
+    headers.append('Accept', stream ? 'text/event-stream' : 'application/json')
+    headers.append('Content-Type', 'application/json')
+
+    const convertedMessages = messages.map(msg => this.convertToOpenAIMessage(msg))
+    const path = stream ? '/v1/chat/stream' : '/v1/chat'
+    const fullUrl = this.buildCodexBridgeUrl(path)
+
+    const body = JSON.stringify({
+      model: this.modelConfig.model_name,
+      messages: convertedMessages,
+      stream,
+      temperature: options?.temperature ?? 0.36,
+      reasoning_effort: options?.codexReasoningEffort ?? 'medium',
+      max_tokens: options?.max_tokens ?? options?.maxTokens ?? 16384
+    })
+
+    return fetch(fullUrl, {
+      method: 'POST',
+      headers,
+      body,
+      signal: abortSignal
+    })
+  }
+
+  private buildCodexBridgeUrl(path: string): string {
+    const baseUrl = this.modelConfig.base_url.replace(/\/+$/, '')
+    const cleanPath = path.startsWith('/') ? path : `/${path}`
+    return `${baseUrl}${cleanPath}`
   }
 
   /**
@@ -322,10 +369,14 @@ export class ApiClient {
   async fetchModels(): Promise<{ id: string; name: string }[]> {
     try {
       const headers = new Headers()
-      headers.append('Authorization', `Bearer ${this.modelConfig.api_key}`)
+      if (this.modelConfig.api_key) {
+        headers.append('Authorization', `Bearer ${this.modelConfig.api_key}`)
+      }
       headers.append('Accept', 'application/json')
 
-      const fullUrl = this.buildUrl('/v1/models')
+      const fullUrl = this.modelConfig.transport === 'codex_bridge'
+        ? this.buildCodexBridgeUrl('/v1/models')
+        : this.buildUrl('/v1/models')
       
       const response = await fetch(fullUrl, {
         method: 'GET',
@@ -342,12 +393,12 @@ export class ApiClient {
       if (data.data && Array.isArray(data.data)) {
         return data.data.map((model: any) => ({
           id: model.id || model.model,
-          name: model.id || model.model
+          name: model.display_name || model.name || model.id || model.model
         }))
       } else if (Array.isArray(data)) {
         return data.map((model: any) => ({
           id: model.id || model.model,
-          name: model.id || model.model
+          name: model.display_name || model.name || model.id || model.model
         }))
       }
       
@@ -364,7 +415,8 @@ export class ApiClient {
  */
 export async function fetchProviderModels(
   baseUrl: string,
-  apiKey: string
+  apiKey: string,
+  transport: ModelConfig['transport'] = 'openai_chat'
 ): Promise<{ id: string; name: string }[]> {
   try {
     const tempConfig: ModelConfig = {
@@ -373,7 +425,8 @@ export async function fetchProviderModels(
       provider: 'temp',
       base_url: baseUrl,
       api_key: apiKey,
-      multimodal: false
+      multimodal: false,
+      transport
     }
     
     const client = new ApiClient(tempConfig)

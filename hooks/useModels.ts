@@ -42,6 +42,7 @@ export const useModels = () => {
         ...baseModel,
         base_url: provider.baseUrl,
         api_key: apiKeys[provider.name] || apiKeys[provider.id] || "", // 兼容新旧key格式
+        transport: baseModel.transport || provider.transport || 'openai_chat'
       }
 
       return {
@@ -67,7 +68,8 @@ export const useModels = () => {
         display_name: customModel.displayName,
         provider: provider.name,
         multimodal: false, // 默认值，可以后续扩展
-        api_format: 'openai' // 默认值，可以后续扩展
+        api_format: 'openai', // 默认值，可以后续扩展
+        transport: provider.transport || 'openai_chat'
       }
 
       // 使用存储的ID，而不是重新生成
