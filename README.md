@@ -139,35 +139,72 @@ pnpm build
 
 本分支新增了 `ChatGPT Pro (Codex)` 供应商。它不使用 OpenAI API Key，而是通过本地 Codex CLI 的 `codex app-server` 复用你的 ChatGPT Plus/Pro 登录态。
 
-### 使用步骤
+这套功能分为两部分：
 
-1. 安装 Codex CLI：
+- 浏览器插件：提供 Overleaf 侧 UI、模型选择和请求转发。
+- OverleafGPT Local Connector：运行在用户电脑本地，负责启动 `codex app-server` bridge，并注册 `overleafgpt-codex://` 本地启动协议。
+
+浏览器插件本身不能注册本地协议，也不能直接启动 `node` 进程。因此，只分发浏览器插件是不够的；普通用户还需要先安装 Local Connector。
+
+### 普通用户
+
+1. 安装 Codex CLI 并登录：
 
    ```bash
    npm install -g @openai/codex
-   ```
-
-2. 登录 ChatGPT 账号：
-
-   ```bash
    codex login
    ```
 
-3. 启动本地 bridge：
+2. 安装 OverleafGPT Local Connector。
+
+   Local Connector 需要完成两件事：安装本地 bridge 文件，并注册 `overleafgpt-codex://` 协议。
+
+3. 加载浏览器插件，打开 Overleaf，进入设置 -> 模型服务 -> `ChatGPT Pro (Codex)`。
+
+4. 点击 `连接到本地 Codex`。
+
+   如果连接失败，说明 Local Connector 没有安装或协议没有注册成功。插件会提示先安装 OverleafGPT Local Connector。
+
+### 开发者从源码运行
+
+1. 安装依赖：
 
    ```bash
-   pnpm bridge
+   corepack pnpm install
    ```
 
-4. 启动扩展开发服务：
+2. 安装 Codex CLI 并登录：
 
    ```bash
-   pnpm dev
+   npm install -g @openai/codex
+   codex login
    ```
 
-5. 在扩展设置中选择 `ChatGPT Pro (Codex)`，使用内置的 `GPT-5.4 (Codex)` 或 `GPT-5.5 (Codex)` 模型。也可以在该供应商下点击“添加模型”，模型列表会从本地 Codex 缓存自动读取。
+3. 注册本地启动协议：
 
-6. 在“对话参数”中设置 `Codex reasoning effort`，可选 `low`、`medium`、`high`、`xhigh`。该参数只会通过本地 bridge 传给 Codex，不影响普通 API 模型。
+   ```powershell
+   corepack pnpm register-bridge-protocol
+   ```
+
+   注册后，插件设置页的 `连接到本地 Codex` 按钮会按需启动本地 bridge。
+
+4. 也可以手动启动本地 bridge：
+
+   ```bash
+   corepack pnpm bridge
+   ```
+
+5. 启动扩展开发服务：
+
+   ```bash
+   corepack pnpm dev
+   ```
+
+### 模型和参数
+
+在扩展设置中选择 `ChatGPT Pro (Codex)`，使用内置的 `GPT-5.4 (Codex)` 或 `GPT-5.5 (Codex)` 模型。也可以在该供应商下点击“添加模型”，模型列表会从本地 Codex 缓存自动读取。
+
+在“对话参数”中设置 `Codex reasoning effort`，可选 `low`、`medium`、`high`、`xhigh`。该参数只会通过本地 bridge 传给 Codex，不影响普通 API 模型。
 
 默认 bridge 地址为 `http://127.0.0.1:17381`。如需修改端口，可设置环境变量 `OVERLEAFGPT_CODEX_BRIDGE_PORT`。
 

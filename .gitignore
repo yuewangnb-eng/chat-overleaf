@@ -26,6 +26,7 @@ out/
 build/
 dist/
 tmp/
+logs/
 overleaf/
 tsconfig.tsbuildinfo
 

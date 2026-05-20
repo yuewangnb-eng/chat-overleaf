@@ -8,7 +8,8 @@
     "dev": "plasmo dev",
     "build": "plasmo build",
     "package": "plasmo package",
-    "bridge": "node bridge/codex-bridge.mjs"
+    "bridge": "node bridge/codex-bridge.mjs",
+    "register-bridge-protocol": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/register-codex-bridge-protocol.ps1"
   },
   "dependencies": {
     "@plasmohq/redux-persist": "^6.1.0",

@@ -1,9 +1,9 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Button } from "~components/ui/button"
 import { Input } from "~components/ui/input"
 import { ScrollArea } from "~components/ui/scroll-area"
 import { Switch } from "~components/ui/switch"
-import { Plus, Eye, EyeOff, Trash2, Edit, Pin, PinOff } from "lucide-react"
+import { Plus, Eye, EyeOff, Trash2, Edit, Pin, PinOff, Loader2, PlugZap } from "lucide-react"
 import { useSettings } from "~hooks/useSettings"
 import { useModels } from "~hooks/useModels"
 import { useDialog } from "~components/ui/dialog"
@@ -34,9 +34,86 @@ export const ModelServiceSettings = () => {
   const [showEditProvider, setShowEditProvider] = useState(false)
   const [editingProvider, setEditingProvider] = useState<any>(null)
   const [localApiKeys, setLocalApiKeys] = useState<Record<string, string>>(apiKeys)
+  const [codexBridgeStatus, setCodexBridgeStatus] = useState<"idle" | "checking" | "starting" | "connected" | "failed">("idle")
+  const [codexBridgeMessage, setCodexBridgeMessage] = useState("")
 
   const allProviders = getAllProviders(customProviders)
   const currentProvider = allProviders.find(p => p.id === selectedProvider)
+  const isCodexProvider = currentProvider?.transport === "codex_bridge"
+
+  const getCodexBridgeHealthUrl = () => {
+    const baseUrl = (currentProvider?.baseUrl || "http://127.0.0.1:17381").replace(/\/+$/, "")
+    return `${baseUrl}/health`
+  }
+
+  const checkCodexBridge = async () => {
+    const response = await fetch(getCodexBridgeHealthUrl(), {
+      method: "GET",
+      cache: "no-store"
+    })
+    if (!response.ok) return false
+    const data = await response.json().catch(() => null)
+    return data?.ok === true
+  }
+
+  const refreshCodexBridgeStatus = async () => {
+    if (!isCodexProvider) return
+    setCodexBridgeStatus("checking")
+    try {
+      const connected = await checkCodexBridge()
+      setCodexBridgeStatus(connected ? "connected" : "failed")
+      setCodexBridgeMessage(connected ? "已连接到本地 Codex Bridge" : "未检测到本地 Codex Bridge")
+    } catch {
+      setCodexBridgeStatus("failed")
+      setCodexBridgeMessage("未检测到本地 Codex Bridge")
+    }
+  }
+
+  const handleConnectCodexBridge = async () => {
+    if (!isCodexProvider) return
+
+    setCodexBridgeStatus("checking")
+    try {
+      if (await checkCodexBridge()) {
+        setCodexBridgeStatus("connected")
+        setCodexBridgeMessage("已连接到本地 Codex Bridge")
+        return
+      }
+    } catch {
+      // Start it below.
+    }
+
+    setCodexBridgeStatus("starting")
+    setCodexBridgeMessage("正在请求 Windows 启动本地 Codex Bridge...")
+    window.open("overleafgpt-codex://start", "_blank")
+
+    for (let i = 0; i < 30; i += 1) {
+      await new Promise(resolve => setTimeout(resolve, 1000))
+      try {
+        if (await checkCodexBridge()) {
+          setCodexBridgeStatus("connected")
+          setCodexBridgeMessage("已连接到本地 Codex Bridge")
+          return
+        }
+      } catch {
+        // Keep polling.
+      }
+    }
+
+    setCodexBridgeStatus("failed")
+    setCodexBridgeMessage(
+      "连接失败。请先安装 OverleafGPT Local Connector，然后重新点击连接到本地 Codex。"
+    )
+  }
+
+  useEffect(() => {
+    if (isCodexProvider) {
+      refreshCodexBridgeStatus()
+    } else {
+      setCodexBridgeStatus("idle")
+      setCodexBridgeMessage("")
+    }
+  }, [isCodexProvider, currentProvider?.baseUrl])
 
   // 获取当前供应商下的所有模型（内置 + 自定义）
   const providerModels = allModels.filter(model => {
@@ -191,11 +268,46 @@ export const ModelServiceSettings = () => {
             {/* API Key 配置 */}
             {currentProvider.transport === "codex_bridge" ? (
               <div className="p-4 border-b border-gray-200">
-                <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
+                <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900 space-y-3">
                   <div className="font-medium">使用本地 Codex Bridge</div>
                   <div className="mt-1 text-xs leading-relaxed">
                     该供应商使用 `codex login` 后的本地 ChatGPT Plus/Pro 登录态，不需要 API Key。请先在本机运行 `pnpm bridge`。
                   </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={handleConnectCodexBridge}
+                      disabled={codexBridgeStatus === "checking" || codexBridgeStatus === "starting"}
+                      className="bg-blue-600 hover:bg-blue-700 text-white"
+                    >
+                      {codexBridgeStatus === "checking" || codexBridgeStatus === "starting" ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <PlugZap className="h-4 w-4 mr-2" />
+                      )}
+                      连接到本地 Codex
+                    </Button>
+
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={refreshCodexBridgeStatus}
+                      disabled={codexBridgeStatus === "checking" || codexBridgeStatus === "starting"}
+                    >
+                      检测连接
+                    </Button>
+                  </div>
+
+                  {codexBridgeMessage && (
+                    <div className={cn(
+                      "text-xs",
+                      codexBridgeStatus === "connected" ? "text-green-700" : "text-blue-900"
+                    )}>
+                      {codexBridgeMessage}
+                    </div>
+                  )}
                 </div>
               </div>
             ) : (
