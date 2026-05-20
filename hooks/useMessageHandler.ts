@@ -37,6 +37,7 @@ interface UseMessageHandlerProps {
   selectedFiles: Set<string>
   extractedFiles: ExtractedFile[]
   llmService: LLMService
+  projectId?: string | null
   currentChatId?: string
   currentChatName?: string
   onChatNameChange?: (name: string) => void
@@ -55,6 +56,7 @@ export const useMessageHandler = ({
   selectedFiles,
   extractedFiles,
   llmService,
+  projectId,
   currentChatId,
   currentChatName,
   onChatNameChange,
@@ -104,10 +106,15 @@ export const useMessageHandler = ({
 
     // 使用最新的模型配置更新 LLM 服务
     llmService.updateModel(currentModelConfig)
+    const codexSessionId = currentModelConfig.transport === 'codex_bridge'
+      ? `overleaf:${projectId || 'unknown-project'}:chat:${currentChatId || 'active-chat'}`
+      : undefined
+
     llmService.updateGenerationParams({
       temperature: modelTemperature,
       maxTokens,
-      codexReasoningEffort
+      codexReasoningEffort,
+      codexSessionId
     })
 
     // 调试信息

@@ -40,6 +40,7 @@ interface ChatInputProps {
   selectedFiles: Set<string>
   extractedFiles: ExtractedFile[]
   llmService: LLMService
+  projectId?: string | null
   disabled?: boolean
   onFileSelectionChange?: (selectedFiles: Set<string>) => void
   onSaveChatHistory?: (messages: Message[]) => Promise<any>
@@ -61,6 +62,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(({
   selectedFiles,
   extractedFiles,
   llmService,
+  projectId,
   disabled = false,
   onFileSelectionChange,
   onSaveChatHistory,
@@ -78,6 +80,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(({
     selectedFiles,
     extractedFiles,
     llmService,
+    projectId,
     currentChatId,
     currentChatName,
     onChatNameChange,

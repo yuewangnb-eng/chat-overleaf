@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 
-import { createServer } from "node:http"
+import { createServer, request } from "node:http"
 import { spawn } from "node:child_process"
 import { createInterface } from "node:readline"
-import { createHash } from "node:crypto"
+import { createHash, randomBytes } from "node:crypto"
 import { mkdir, readFile, writeFile } from "node:fs/promises"
 import { existsSync } from "node:fs"
 import { join } from "node:path"
@@ -16,6 +16,7 @@ const TURN_TIMEOUT_MS = 300_000
 const IMAGE_DIR = join(tmpdir(), "overleafgpt-codex-bridge-images")
 const CODEX_MODELS_CACHE = join(homedir(), ".codex", "models_cache.json")
 const CODEX_REASONING_LEVELS = new Set(["low", "medium", "high", "xhigh"])
+const CODEX_SESSION_TTL_MS = 12 * 60 * 60 * 1000
 
 class CodexAppServer {
   constructor() {
@@ -175,6 +176,7 @@ class CodexAppServer {
 }
 
 const codex = new CodexAppServer()
+const codexThreadSessions = new Map()
 
 function resolveCodexLaunch() {
   const explicit = process.env.CODEX_PATH?.trim()
@@ -320,23 +322,51 @@ function splitContent(content) {
   return { text: text.join("\n\n"), images }
 }
 
+function normalizeSessionId(value) {
+  if (typeof value !== "string") return ""
+  return value.trim().slice(0, 500)
+}
+
+function pruneCodexThreadSessions() {
+  const now = Date.now()
+  for (const [sessionId, session] of codexThreadSessions) {
+    if (now - session.lastUsedAt > CODEX_SESSION_TTL_MS) {
+      codexThreadSessions.delete(sessionId)
+    }
+  }
+}
+
 function extractSystemInstructions(messages) {
-  return messages
-    .filter((message) => message.role === "system")
-    .map((message) => splitContent(message.content).text.trim())
-    .filter(Boolean)
-    .join("\n\n")
+  const systemMessage = messages.find((message) => message.role === "system")
+  return systemMessage ? splitContent(systemMessage.content).text.trim() : ""
 }
 
 function formatVisibleMessages(messages) {
+  const firstSystemIndex = messages.findIndex((message) => message.role === "system")
   return messages
-    .filter((message) => message.role !== "system")
-    .map((message) => {
+    .map((message, index) => ({ message, index }))
+    .filter(({ message, index }) => message.role !== "system" || index !== firstSystemIndex)
+    .map(({ message }) => {
       const { text, images } = splitContent(message.content)
       const imageNote = images.length ? `\n\n[${images.length} image(s) attached]` : ""
-      return `${String(message.role || "user").toUpperCase()}:\n${text || "[Empty message]"}${imageNote}`
+      const role = message.role === "system" ? "SYSTEM CONTEXT" : String(message.role || "user").toUpperCase()
+      return `${role}:\n${text || "[Empty message]"}${imageNote}`
     })
     .join("\n\n---\n\n")
+}
+
+function messagesForCodexTurn(messages, reuseThread) {
+  if (!reuseThread) return messages
+
+  const lastAssistantIndex = messages.reduce(
+    (lastIndex, message, index) => message.role === "assistant" ? index : lastIndex,
+    -1
+  )
+  if (lastAssistantIndex < 0) return messages
+
+  const firstSystemMessage = messages.find((message) => message.role === "system")
+  const currentTurnMessages = messages.slice(lastAssistantIndex + 1)
+  return firstSystemMessage ? [firstSystemMessage, ...currentTurnMessages] : currentTurnMessages
 }
 
 async function dataUrlToLocalImage(url) {
@@ -375,6 +405,59 @@ async function buildTurnInput(messages) {
   }
 
   return input
+}
+
+async function startCodexThread({ model, instructions, ephemeral }) {
+  try {
+    return await codex.send("thread/start", {
+      model,
+      ephemeral,
+      approvalPolicy: "never",
+      developerInstructions: instructions,
+      config: { features: { shell_tool: false } },
+    })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    if (!/developerInstructions|developer instructions|unknown field|invalid params/i.test(message)) {
+      throw error
+    }
+    return await codex.send("thread/start", {
+      model,
+      ephemeral,
+      approvalPolicy: "never",
+      config: { features: { shell_tool: false } },
+    })
+  }
+}
+
+async function getCodexThread({ sessionId, model, instructions }) {
+  pruneCodexThreadSessions()
+
+  if (sessionId) {
+    const session = codexThreadSessions.get(sessionId)
+    if (session?.threadId) {
+      session.lastUsedAt = Date.now()
+      return { threadId: session.threadId, reused: true }
+    }
+  }
+
+  const threadResult = await startCodexThread({
+    model,
+    instructions,
+    ephemeral: !sessionId,
+  })
+  const threadId = extractId(threadResult, "thread")
+  if (!threadId) throw new Error("codex app-server did not return a thread ID")
+
+  if (sessionId) {
+    codexThreadSessions.set(sessionId, {
+      threadId,
+      createdAt: Date.now(),
+      lastUsedAt: Date.now(),
+    })
+  }
+
+  return { threadId, reused: false }
 }
 
 function extractId(result, key) {
@@ -455,40 +538,33 @@ async function runCodexTurn(body, callbacks = {}) {
   const reasoningEffort = normalizeReasoningEffort(
     body.reasoning_effort || body.effort || body.reasoning?.effort
   )
+  const sessionId = normalizeSessionId(body.session_id || body.codex_session_id)
   const instructions = extractSystemInstructions(messages) || "You are a helpful assistant."
-  const input = await buildTurnInput(messages)
 
-  let threadResult
+  let { threadId, reused } = await getCodexThread({ sessionId, model, instructions })
+  let input = await buildTurnInput(messagesForCodexTurn(messages, reused))
+  let turnResult
   try {
-    threadResult = await codex.send("thread/start", {
+    turnResult = await codex.send("turn/start", {
+      threadId,
+      input,
       model,
-      ephemeral: true,
+      effort: reasoningEffort,
       approvalPolicy: "never",
-      developerInstructions: instructions,
-      config: { features: { shell_tool: false } },
     })
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    if (!/developerInstructions|developer instructions|unknown field|invalid params/i.test(message)) {
-      throw error
-    }
-    threadResult = await codex.send("thread/start", {
+    if (!sessionId || !reused) throw error
+    codexThreadSessions.delete(sessionId)
+    ;({ threadId, reused } = await getCodexThread({ sessionId, model, instructions }))
+    input = await buildTurnInput(messages)
+    turnResult = await codex.send("turn/start", {
+      threadId,
+      input,
       model,
-      ephemeral: true,
+      effort: reasoningEffort,
       approvalPolicy: "never",
-      config: { features: { shell_tool: false } },
     })
   }
-  const threadId = extractId(threadResult, "thread")
-  if (!threadId) throw new Error("codex app-server did not return a thread ID")
-
-  const turnResult = await codex.send("turn/start", {
-    threadId,
-    input,
-    model,
-    effort: reasoningEffort,
-    approvalPolicy: "never",
-  })
   const turnId = extractId(turnResult, "turn")
   if (!turnId) throw new Error("codex app-server did not return a turn ID")
 
@@ -621,6 +697,73 @@ async function handleJsonChat(req, res) {
   })
 }
 
+async function handleResetCodexSession(req, res) {
+  const body = await readJsonBody(req)
+  const sessionId = normalizeSessionId(body.session_id || body.codex_session_id)
+  if (sessionId) {
+    const removed = codexThreadSessions.delete(sessionId)
+    json(res, 200, { ok: true, removed, session_id: sessionId })
+    return
+  }
+
+  const removed = codexThreadSessions.size
+  codexThreadSessions.clear()
+  json(res, 200, { ok: true, removed })
+}
+
+async function handleCodexMemoryCheck(req, res) {
+  const body = await readJsonBody(req)
+  const model = String(body.model || "gpt-5.4")
+  const reasoningEffort = normalizeReasoningEffort(
+    body.reasoning_effort || body.effort || body.reasoning?.effort
+  )
+  const sessionId = `self-check:${Date.now()}:${randomBytes(4).toString("hex")}`
+  const nonce = `overleafgpt-${randomBytes(8).toString("hex")}`
+  const systemMessage = {
+    role: "system",
+    content: "You are running a local memory diagnostic. Follow the user instruction exactly.",
+  }
+
+  try {
+    const firstResponse = await runCodexTurn({
+      model,
+      reasoning_effort: reasoningEffort,
+      session_id: sessionId,
+      messages: [
+        systemMessage,
+        {
+          role: "user",
+          content: `Remember this diagnostic nonce for the next turn: ${nonce}. Reply only: ACK`,
+        },
+      ],
+    })
+
+    const secondResponse = await runCodexTurn({
+      model,
+      reasoning_effort: reasoningEffort,
+      session_id: sessionId,
+      messages: [
+        systemMessage,
+        {
+          role: "user",
+          content: "What diagnostic nonce did I ask you to remember in the previous turn? Reply only the nonce.",
+        },
+      ],
+    })
+
+    const remembered = secondResponse.includes(nonce)
+    json(res, 200, {
+      ok: remembered,
+      remembered,
+      nonce,
+      first_response: firstResponse,
+      second_response: secondResponse,
+    })
+  } finally {
+    codexThreadSessions.delete(sessionId)
+  }
+}
+
 const server = createServer(async (req, res) => {
   try {
     setCorsHeaders(res)
@@ -638,6 +781,30 @@ const server = createServer(async (req, res) => {
     if (req.method === "GET" && req.url === "/v1/models") {
       const models = await readCodexModels()
       json(res, 200, { object: "list", data: models })
+      return
+    }
+
+    if (req.method === "GET" && req.url === "/v1/codex/sessions") {
+      pruneCodexThreadSessions()
+      json(res, 200, {
+        object: "list",
+        data: Array.from(codexThreadSessions.entries()).map(([sessionId, session]) => ({
+          session_id: sessionId,
+          thread_id: session.threadId,
+          created_at: new Date(session.createdAt).toISOString(),
+          last_used_at: new Date(session.lastUsedAt).toISOString(),
+        })),
+      })
+      return
+    }
+
+    if (req.method === "POST" && req.url === "/v1/codex/session/reset") {
+      await handleResetCodexSession(req, res)
+      return
+    }
+
+    if (req.method === "POST" && req.url === "/v1/codex/memory-check") {
+      await handleCodexMemoryCheck(req, res)
       return
     }
 
@@ -659,7 +826,56 @@ const server = createServer(async (req, res) => {
   }
 })
 
+server.on("error", async (error) => {
+  if (error?.code !== "EADDRINUSE") {
+    console.error(error)
+    process.exit(1)
+  }
+
+  const healthUrl = `http://${HOST}:${PORT}/health`
+  const existingService = await fetchJson(healthUrl).catch(() => null)
+  if (existingService?.service === "overleafgpt-codex-bridge") {
+    console.error(`OverleafGPT Codex Bridge is already running at ${healthUrl}.`)
+    console.error("You can keep using the existing bridge, or stop the old process before starting a new one.")
+  } else {
+    console.error(`Port ${PORT} on ${HOST} is already in use by another process.`)
+    console.error("Close the application using this port, or free it from PowerShell:")
+  }
+
+  console.error(`Get-NetTCPConnection -LocalAddress ${HOST} -LocalPort ${PORT} | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { Stop-Process -Id $_ }`)
+  console.error("Then run: corepack pnpm bridge")
+  process.exit(1)
+})
+
+async function fetchJson(url) {
+  return new Promise((resolve, reject) => {
+    const req = request(url, { method: "GET", timeout: 2000 }, (res) => {
+      let raw = ""
+      res.setEncoding("utf8")
+      res.on("data", (chunk) => {
+        raw += chunk
+      })
+      res.on("end", () => {
+        if ((res.statusCode || 0) < 200 || (res.statusCode || 0) >= 300) {
+          resolve(null)
+          return
+        }
+        try {
+          resolve(raw.trim() ? JSON.parse(raw) : null)
+        } catch (error) {
+          reject(error)
+        }
+      })
+    })
+    req.on("timeout", () => {
+      req.destroy(new Error("Timed out checking existing bridge health"))
+    })
+    req.on("error", reject)
+    req.end()
+  })
+}
+
 server.listen(PORT, HOST, () => {
   console.log(`OverleafGPT Codex Bridge listening at http://${HOST}:${PORT}`)
-  console.log("Run `codex login` before using ChatGPT Pro (Codex) models.")
+  console.log("Run `codex login` before using Codex models.")
 })

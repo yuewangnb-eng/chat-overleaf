@@ -210,6 +210,41 @@ pnpm build
 
 ---
 
+### Codex Session Memory
+
+Codex Bridge 会按同一个 Overleaf 项目和同一个 OverleafGPT 聊天会话复用同一条 Codex thread：
+
+```text
+overleaf:<projectId>:chat:<currentChatId>
+```
+
+Codex 模型名不参与这个 session key。因此在同一个聊天里从 `gpt-5.4` 切换到 `gpt-5.5`，仍会沿用原来的 Codex 记忆。
+
+某个 session 第一次请求时，bridge 会把当前系统规则和可见的近期聊天上下文发给 Codex，用于初始化 thread。之后同一个 session 的请求会复用 Codex thread，只发送最新 Overleaf 上下文和当前用户问题，避免每轮重复传旧历史，同时仍然每轮刷新项目文件信息。
+
+本地自检端点：
+
+```bash
+curl http://127.0.0.1:17381/v1/codex/sessions
+curl -X POST http://127.0.0.1:17381/v1/codex/memory-check -H "Content-Type: application/json" -d "{\"model\":\"gpt-5.4\",\"reasoning_effort\":\"medium\"}"
+curl -X POST http://127.0.0.1:17381/v1/codex/session/reset -H "Content-Type: application/json" -d "{}"
+```
+
+如果启动 bridge 时提示端口 `17381` 被占用，通常有两种情况：
+
+- 已经有一个 OverleafGPT Codex Bridge 在运行：可以直接继续使用，不需要重复启动。
+- 其他程序占用了端口：关闭占用端口的程序，或在 PowerShell 中释放端口后重新启动 bridge。
+
+```powershell
+Get-NetTCPConnection -LocalAddress 127.0.0.1 -LocalPort 17381 |
+  Select-Object -ExpandProperty OwningProcess -Unique |
+  ForEach-Object { Stop-Process -Id $_ }
+
+corepack pnpm bridge
+```
+
+---
+
 ## WebChat / web_sync Provider
 
 本分支新增独立的 `web_sync` provider：

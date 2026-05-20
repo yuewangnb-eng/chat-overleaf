@@ -30,6 +30,7 @@ export class LLMService {
     temperature: number
     maxTokens: number
     codexReasoningEffort: CodexReasoningEffort
+    codexSessionId?: string
   }
 
   constructor(model: ModelConfig) {
@@ -53,6 +54,7 @@ export class LLMService {
     temperature?: number
     maxTokens?: number
     codexReasoningEffort?: CodexReasoningEffort
+    codexSessionId?: string
   }) {
     if (params.temperature !== undefined) {
       this.generationParams.temperature = params.temperature
@@ -62,6 +64,9 @@ export class LLMService {
     }
     if (params.codexReasoningEffort !== undefined) {
       this.generationParams.codexReasoningEffort = params.codexReasoningEffort
+    }
+    if (params.codexSessionId !== undefined) {
+      this.generationParams.codexSessionId = params.codexSessionId
     }
   }
 
@@ -79,7 +84,8 @@ export class LLMService {
         {
           temperature: this.generationParams.temperature,
           maxTokens: this.generationParams.maxTokens,
-          codexReasoningEffort: this.generationParams.codexReasoningEffort
+          codexReasoningEffort: this.generationParams.codexReasoningEffort,
+          codexSessionId: this.generationParams.codexSessionId
         }
       )
 
@@ -125,7 +131,8 @@ export class LLMService {
         {
           temperature: this.generationParams.temperature,
           maxTokens: this.generationParams.maxTokens,
-          codexReasoningEffort: this.generationParams.codexReasoningEffort
+          codexReasoningEffort: this.generationParams.codexReasoningEffort,
+          codexSessionId: this.generationParams.codexSessionId
         }
       )
 

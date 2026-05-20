@@ -7,6 +7,7 @@ interface ChatOptions {
   max_tokens?: number
   maxTokens?: number
   codexReasoningEffort?: CodexReasoningEffort
+  codexSessionId?: string
 }
 
 /**
@@ -106,6 +107,7 @@ export class ApiClient {
       stream,
       temperature: options?.temperature ?? 0.36,
       reasoning_effort: options?.codexReasoningEffort ?? 'medium',
+      session_id: options?.codexSessionId,
       max_tokens: options?.max_tokens ?? options?.maxTokens ?? 16384
     })
 

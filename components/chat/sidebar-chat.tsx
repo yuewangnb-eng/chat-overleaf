@@ -723,6 +723,7 @@ export const SidebarChat = forwardRef<SidebarChatHandle, SidebarChatProps>(({ on
         selectedFiles={syncedSelectedFiles}
         extractedFiles={extractedFiles}
         llmService={llmService}
+        projectId={projectId}
         onFileSelectionChange={setSelectedFiles}
         onSaveChatHistory={(messages) => saveChatHistory(messages, currentChatName, currentChatId)}
         isOnlyInitialMessage={isOnlyInitialMessage}
