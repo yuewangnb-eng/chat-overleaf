@@ -137,7 +137,7 @@ pnpm build
 
 ## ChatGPT Pro / Codex Bridge
 
-本分支新增了 `ChatGPT Pro (Codex)` 供应商。它不使用 OpenAI API Key，而是通过本地 Codex CLI 的 `codex app-server` 复用你的 ChatGPT Plus/Pro 登录态。
+本分支新增了 `Codex` 供应商。它不使用 OpenAI API Key，而是通过本地 Codex CLI 的 `codex app-server` 复用你的 ChatGPT Plus/Pro 登录态。
 
 这套功能分为两部分：
 
@@ -159,7 +159,7 @@ pnpm build
 
    Local Connector 需要完成两件事：安装本地 bridge 文件，并注册 `overleafgpt-codex://` 协议。
 
-3. 加载浏览器插件，打开 Overleaf，进入设置 -> 模型服务 -> `ChatGPT Pro (Codex)`。
+3. 加载浏览器插件，打开 Overleaf，进入设置 -> 模型服务 -> `Codex`。
 
 4. 点击 `连接到本地 Codex`。
 
@@ -202,11 +202,54 @@ pnpm build
 
 ### 模型和参数
 
-在扩展设置中选择 `ChatGPT Pro (Codex)`，使用内置的 `GPT-5.4 (Codex)` 或 `GPT-5.5 (Codex)` 模型。也可以在该供应商下点击“添加模型”，模型列表会从本地 Codex 缓存自动读取。
+在扩展设置中选择 `Codex`，使用内置的 `GPT-5.4 (Codex)` 或 `GPT-5.5 (Codex)` 模型。也可以在该供应商下点击“添加模型”，模型列表会从本地 Codex 缓存自动读取。
 
 在“对话参数”中设置 `Codex reasoning effort`，可选 `low`、`medium`、`high`、`xhigh`。该参数只会通过本地 bridge 传给 Codex，不影响普通 API 模型。
 
 默认 bridge 地址为 `http://127.0.0.1:17381`。如需修改端口，可设置环境变量 `OVERLEAFGPT_CODEX_BRIDGE_PORT`。
+
+---
+
+## WebChat / web_sync Provider
+
+本分支新增独立的 `web_sync` provider：
+
+- `ChatGPT Web`
+- `DeepSeek Web`
+
+它们不使用服务商 API Key，也不依赖 `Codex` / Codex Bridge。扩展会把 OverleafGPT 中的一次提问转发到已经打开并登录的 ChatGPT 或 DeepSeek 网页标签页，再把网页生成的回答流式返回到 OverleafGPT。
+
+### 使用方式
+
+1. 在同一个浏览器中打开并登录：
+   - ChatGPT: `https://chatgpt.com/`
+   - DeepSeek: `https://chat.deepseek.com/`
+2. 回到 Overleaf，打开 OverleafGPT 设置。
+3. 在“模型服务”中选择 `ChatGPT Web` 或 `DeepSeek Web`。
+4. 点击“检测网页连接”，确认扩展能看到对应 WebChat 标签页。
+5. 在模型列表中选择：
+   - `ChatGPT Web`
+   - `DeepSeek Web`
+   当前具体模型在 ChatGPT / DeepSeek 网页版中选择。
+6. 正常提问即可。
+
+### 设计边界
+
+- `web_sync` 是单独 transport，不会影响普通 API provider，也不会影响 `Codex`。
+- 第一版使用网页当前选中的模型，不自动切换网页模型。
+- 第一版只把本次 OverleafGPT 请求投递到 WebChat 页面，不读取历史记录。
+- ChatGPT / DeepSeek 网页可能把这次对话保存在各自网页历史中，但这取决于网页账号设置、临时聊天设置和服务商策略。
+- 该方案依赖网页 DOM，ChatGPT / DeepSeek 页面结构变化时可能需要更新 content script。
+
+### 权限说明
+
+为了实现网页桥接，扩展需要增加以下页面权限：
+
+- `https://chatgpt.com/*`
+- `https://chat.openai.com/*`
+- `https://chat.deepseek.com/*`
+
+这些权限仅用于用户选择 `ChatGPT Web` / `DeepSeek Web` provider 时向对应网页发送问题并读取本次回复。
 
 ---
 

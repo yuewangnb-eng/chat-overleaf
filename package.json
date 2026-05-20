@@ -53,10 +53,16 @@
     "host_permissions": [
       "https://www.overleaf.com/*",
       "https://*.overleaf.com/*",
+      "https://chatgpt.com/*",
+      "https://chat.openai.com/*",
+      "https://chat.deepseek.com/*",
       "http://127.0.0.1/*",
       "http://localhost/*",
       "http://127.0.0.1:17381/*",
       "http://localhost:17381/*"
+    ],
+    "permissions": [
+      "tabs"
     ]
   }
 }

@@ -4,12 +4,30 @@ import type { CustomProvider } from "~store/types"
 export const builtinProviders: CustomProvider[] = [
   {
     id: "codex-bridge",
-    name: "ChatGPT Pro (Codex)",
+    name: "Codex",
     baseUrl: "http://127.0.0.1:17381",
     apiKeyLabel: "Not required",
     isCustom: false,
     enabled: true,
     transport: "codex_bridge"
+  },
+  {
+    id: "chatgpt-web",
+    name: "ChatGPT Web",
+    baseUrl: "web-sync://chatgpt",
+    apiKeyLabel: "Not required",
+    isCustom: false,
+    enabled: true,
+    transport: "web_sync"
+  },
+  {
+    id: "deepseek-web",
+    name: "DeepSeek Web",
+    baseUrl: "web-sync://deepseek",
+    apiKeyLabel: "Not required",
+    isCustom: false,
+    enabled: true,
+    transport: "web_sync"
   },
   {
     id: "yunwu",

@@ -30,6 +30,9 @@ export const AddModelDialog = ({ provider, onClose }: AddModelDialogProps) => {
   useEffect(() => {
     const loadModels = async () => {
       const apiKey = apiKeys[provider.name] || apiKeys[provider.id]
+      if (provider.transport === 'web_sync') {
+        return
+      }
       if ((!apiKey && provider.transport !== 'codex_bridge') || !provider.baseUrl) {
         return
       }

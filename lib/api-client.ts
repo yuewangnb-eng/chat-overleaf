@@ -70,6 +70,10 @@ export class ApiClient {
     abortSignal?: AbortSignal,
     options?: ChatOptions
   ): Promise<Response> {
+    if (this.modelConfig.transport === 'web_sync') {
+      return this.sendWebSyncRequest(messages, stream, abortSignal)
+    }
+
     if (this.modelConfig.transport === 'codex_bridge') {
       return this.sendCodexBridgeRequest(messages, stream, abortSignal, options)
     }
@@ -111,6 +115,190 @@ export class ApiClient {
       body,
       signal: abortSignal
     })
+  }
+
+  private async sendWebSyncRequest(
+    messages: ChatMessage[],
+    stream: boolean,
+    abortSignal?: AbortSignal
+  ): Promise<Response> {
+    if (typeof chrome === 'undefined' || !chrome.runtime?.connect) {
+      return new Response('WebSync is only available inside the browser extension.', { status: 503 })
+    }
+
+    const encoder = new TextEncoder()
+    const requestId = `web-sync-${Date.now()}-${Math.random().toString(36).slice(2)}`
+    const target = this.getWebSyncTarget()
+    const promptPayload = await this.buildWebSyncPrompt(messages, target)
+
+    let port: chrome.runtime.Port | null = null
+    let closed = false
+
+    const responseStream = new ReadableStream<Uint8Array>({
+      start: (controller) => {
+        const close = () => {
+          if (closed) return
+          closed = true
+          try {
+            controller.close()
+          } catch {
+            // Already closed.
+          }
+        }
+
+        const writeSse = (payload: unknown) => {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`))
+        }
+
+        const writeDone = () => {
+          controller.enqueue(encoder.encode('data: [DONE]\n\n'))
+          close()
+        }
+
+        port = chrome.runtime.connect({ name: 'overleafgpt-web-sync' })
+        port.onMessage.addListener((message) => {
+          if (!message || message.requestId !== requestId) return
+
+          if (message.type === 'web_sync_delta') {
+            writeSse({
+              id: requestId,
+              object: 'chat.completion.chunk',
+              choices: [{
+                index: 0,
+                delta: { content: message.delta || '' },
+                finish_reason: null
+              }]
+            })
+          } else if (message.type === 'web_sync_done') {
+            writeDone()
+          } else if (message.type === 'web_sync_error') {
+            closed = true
+            controller.error(new Error(message.error || 'WebSync request failed'))
+          }
+        })
+
+        port.onDisconnect.addListener(() => {
+          if (!closed) {
+            controller.error(new Error(chrome.runtime.lastError?.message || 'WebSync bridge disconnected'))
+          }
+        })
+
+        abortSignal?.addEventListener('abort', () => {
+          port?.postMessage({ type: 'web_sync_abort', requestId })
+          port?.disconnect()
+          close()
+        }, { once: true })
+
+        port.postMessage({
+          type: 'web_sync_start',
+          requestId,
+          target,
+          prompt: promptPayload.prompt,
+          primedKey: promptPayload.primedKey,
+          markPrimed: promptPayload.markPrimed,
+          stream,
+          model: this.modelConfig.model_name
+        })
+      },
+      cancel: () => {
+        port?.postMessage({ type: 'web_sync_abort', requestId })
+        port?.disconnect()
+      }
+    })
+
+    return new Response(responseStream, {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache'
+      }
+    })
+  }
+
+  private getWebSyncTarget(): 'chatgpt' | 'deepseek' {
+    const marker = `${this.modelConfig.provider} ${this.modelConfig.model_name} ${this.modelConfig.base_url}`.toLowerCase()
+    return marker.includes('deepseek') ? 'deepseek' : 'chatgpt'
+  }
+
+  private async buildWebSyncPrompt(messages: ChatMessage[], target: 'chatgpt' | 'deepseek'): Promise<{
+    prompt: string
+    primedKey: string
+    markPrimed: boolean
+  }> {
+    const primedKey = `${target}:${this.modelConfig.provider}`
+    const includeRoleInstructions = !(await this.isWebSyncPrimed(primedKey))
+
+    const firstSystemIndex = messages.findIndex(message => message.role === 'system')
+    const lastUserIndex = findLastIndex(messages, message => message.role === 'user')
+    const sections: string[] = []
+
+    if (includeRoleInstructions && firstSystemIndex >= 0) {
+      sections.push(`Role instructions, remember for this WebChat conversation:\n${this.messageContentToText(messages[firstSystemIndex].content)}`)
+    }
+
+    const contextSections = messages
+      .map((message, index) => ({ message, index, text: this.messageContentToText(message.content).trim() }))
+      .filter(item => item.text)
+      .filter(item => {
+        if (item.index === firstSystemIndex) return false
+        if (item.index === lastUserIndex) return false
+        if (item.message.role === 'assistant') return false
+        if (item.message.role === 'system') return true
+        return this.isWebSyncAutoContext(item.text)
+      })
+
+    if (contextSections.length > 0) {
+      sections.push(`Current Overleaf context:\n${contextSections.map(item => item.text).join('\n\n---\n\n')}`)
+    }
+
+    const currentUserText = lastUserIndex >= 0
+      ? this.messageContentToText(messages[lastUserIndex].content).trim()
+      : ''
+
+    if (currentUserText) {
+      sections.push(`Current user request:\n${currentUserText}`)
+    }
+
+    return {
+      prompt: sections.join('\n\n==========\n\n'),
+      primedKey,
+      markPrimed: includeRoleInstructions
+    }
+  }
+
+  private async isWebSyncPrimed(primedKey: string): Promise<boolean> {
+    if (typeof chrome === 'undefined' || !chrome.runtime?.sendMessage) {
+      return false
+    }
+
+    return new Promise(resolve => {
+      chrome.runtime.sendMessage({
+        type: 'overleafgpt_web_sync_is_primed',
+        primedKey
+      }, response => {
+        resolve(response?.primed === true)
+      })
+    })
+  }
+
+  private isWebSyncAutoContext(text: string): boolean {
+    return text.includes('系统自动提供') ||
+      text.includes('绯荤粺') ||
+      text.includes('最新文件内容') ||
+      text.includes('项目文件列表') ||
+      text.includes('真实项目文件') ||
+      text.includes('銆婃枃浠') ||
+      text.includes('[Image omitted:')
+  }
+
+  private messageContentToText(content: ChatMessage['content']): string {
+    if (typeof content === 'string') return content
+
+    return content.map((part) => {
+      if (part.type === 'text') return part.text || ''
+      if (part.type === 'image_url') return '[Image omitted: WebSync currently sends text only.]'
+      return ''
+    }).filter(Boolean).join('\n\n')
   }
 
   private buildCodexBridgeUrl(path: string): string {
@@ -408,6 +596,13 @@ export class ApiClient {
       return []
     }
   }
+}
+
+function findLastIndex<T>(items: T[], predicate: (item: T, index: number) => boolean): number {
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    if (predicate(items[index], index)) return index
+  }
+  return -1
 }
 
 /**

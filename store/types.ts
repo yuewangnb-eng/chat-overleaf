@@ -30,7 +30,7 @@ export interface CustomProvider {
   apiKeyLabel: string
   isCustom: boolean
   enabled?: boolean // 供应商是否启用，默认为true
-  transport?: 'openai_chat' | 'codex_bridge'
+  transport?: 'openai_chat' | 'codex_bridge' | 'web_sync'
 }
 
 // 自定义模型配置

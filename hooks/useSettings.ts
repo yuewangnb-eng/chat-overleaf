@@ -67,7 +67,9 @@ export const useSettings = () => {
       { name: 'OpenAI', baseUrl: 'https://api.openai.com/v1' },
       { name: 'Gemini', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai' },
       { name: 'Anthropic', baseUrl: 'https://api.anthropic.com/v1' },
-      { name: 'ChatGPT Pro (Codex)', baseUrl: 'http://127.0.0.1:17381' },
+      { name: 'ChatGPT Web', baseUrl: 'web-sync://chatgpt' },
+      { name: 'DeepSeek Web', baseUrl: 'web-sync://deepseek' },
+      { name: 'Codex', baseUrl: 'http://127.0.0.1:17381' },
     ]
 
     builtinProviders.forEach(provider => {
@@ -89,6 +91,9 @@ export const useSettings = () => {
   // 检查模型是否可用（有 API key 和 base URL）
   const isModelAvailable = (model: ModelConfig): boolean => {
     const config = getModelConfig(model)
+    if (config.transport === 'web_sync') {
+      return true
+    }
     if (config.transport === 'codex_bridge') {
       return !!config.base_url
     }

@@ -94,8 +94,8 @@ export const useMessageHandler = ({
     const currentModelConfig = getModelConfig(currentModel)
 
     // 检查当前模型是否可用。Codex Bridge 使用本地登录态，不需要 API Key。
-    const usesCodexBridge = currentModelConfig.transport === 'codex_bridge'
-    if ((!usesCodexBridge && !currentModelConfig.api_key) || !currentModelConfig.base_url) {
+    const usesAuthlessProvider = currentModelConfig.transport === 'codex_bridge' || currentModelConfig.transport === 'web_sync'
+    if ((!usesAuthlessProvider && !currentModelConfig.api_key) || !currentModelConfig.base_url) {
       error(`当前模型 ${currentModel.display_name} 未配置 API Key 或 Base URL，请在设置中配置后再使用。`, {
         title: '配置错误'
       })
@@ -112,7 +112,7 @@ export const useMessageHandler = ({
 
     // 调试信息
     console.log('Sending message with model:', currentModelConfig.display_name)
-    console.log('API Key available:', usesCodexBridge ? 'not required' : !!currentModelConfig.api_key)
+    console.log('API Key available:', usesAuthlessProvider ? 'not required' : !!currentModelConfig.api_key)
     console.log('Base URL:', currentModelConfig.base_url)
 
     const userMessage: Message = {

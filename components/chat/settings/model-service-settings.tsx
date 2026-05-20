@@ -3,7 +3,7 @@ import { Button } from "~components/ui/button"
 import { Input } from "~components/ui/input"
 import { ScrollArea } from "~components/ui/scroll-area"
 import { Switch } from "~components/ui/switch"
-import { Plus, Eye, EyeOff, Trash2, Edit, Pin, PinOff, Loader2, PlugZap } from "lucide-react"
+import { Plus, Eye, EyeOff, Trash2, Edit, Pin, PinOff, Loader2, PlugZap, ExternalLink, RotateCcw } from "lucide-react"
 import { useSettings } from "~hooks/useSettings"
 import { useModels } from "~hooks/useModels"
 import { useDialog } from "~components/ui/dialog"
@@ -40,6 +40,12 @@ export const ModelServiceSettings = () => {
   const allProviders = getAllProviders(customProviders)
   const currentProvider = allProviders.find(p => p.id === selectedProvider)
   const isCodexProvider = currentProvider?.transport === "codex_bridge"
+  const isWebSyncProvider = currentProvider?.transport === "web_sync"
+  const webSyncTarget = currentProvider?.id === "deepseek-web" ? "deepseek" : "chatgpt"
+  const webSyncLabel = webSyncTarget === "deepseek" ? "DeepSeek" : "ChatGPT"
+  const webSyncUrl = webSyncTarget === "deepseek" ? "https://chat.deepseek.com/" : "https://chatgpt.com/"
+  const [webSyncStatus, setWebSyncStatus] = useState<"idle" | "checking" | "connected" | "failed">("idle")
+  const [webSyncMessage, setWebSyncMessage] = useState("")
 
   const getCodexBridgeHealthUrl = () => {
     const baseUrl = (currentProvider?.baseUrl || "http://127.0.0.1:17381").replace(/\/+$/, "")
@@ -106,14 +112,67 @@ export const ModelServiceSettings = () => {
     )
   }
 
+  const sendWebSyncMessage = (message: any): Promise<any> => {
+    return new Promise((resolve) => {
+      if (typeof chrome === "undefined" || !chrome.runtime?.sendMessage) {
+        resolve({ ok: false, connected: false, error: "Chrome runtime unavailable" })
+        return
+      }
+      chrome.runtime.sendMessage(message, resolve)
+    })
+  }
+
+  const refreshWebSyncStatus = async () => {
+    if (!isWebSyncProvider) return
+    setWebSyncStatus("checking")
+    const result = await sendWebSyncMessage({
+      type: "overleafgpt_web_sync_check",
+      target: webSyncTarget
+    })
+
+    if (result?.connected) {
+      setWebSyncStatus("connected")
+      setWebSyncMessage(`已检测到打开的 ${webSyncLabel} 网页`)
+    } else {
+      setWebSyncStatus("failed")
+      setWebSyncMessage(`未检测到 ${webSyncLabel} 网页。请先打开 ${webSyncUrl} 并登录。`)
+    }
+  }
+
+  const openWebSyncPage = async () => {
+    await sendWebSyncMessage({
+      type: "overleafgpt_web_sync_open",
+      target: webSyncTarget
+    })
+    setWebSyncMessage(`已请求打开 ${webSyncLabel} 网页，请登录后点击检测连接。`)
+  }
+
+  const resetWebSyncRole = async () => {
+    if (!currentProvider) return
+    const result = await sendWebSyncMessage({
+      type: "overleafgpt_web_sync_reset_role",
+      primedKey: `${webSyncTarget}:${currentProvider.name}`
+    })
+
+    if (result?.ok) {
+      setWebSyncMessage(`已重置 ${webSyncLabel} 角色规则状态。下一次提问会重新发送前置角色规则。`)
+    } else {
+      setWebSyncMessage(`重置失败：${result?.error || "未知错误"}`)
+    }
+  }
+
   useEffect(() => {
     if (isCodexProvider) {
       refreshCodexBridgeStatus()
+    } else if (isWebSyncProvider) {
+      refreshWebSyncStatus()
     } else {
       setCodexBridgeStatus("idle")
       setCodexBridgeMessage("")
+      setWebSyncStatus("idle")
+      setWebSyncMessage("")
     }
-  }, [isCodexProvider, currentProvider?.baseUrl])
+  }, [isCodexProvider, isWebSyncProvider, currentProvider?.baseUrl, currentProvider?.id])
 
   // 获取当前供应商下的所有模型（内置 + 自定义）
   const providerModels = allModels.filter(model => {
@@ -266,7 +325,64 @@ export const ModelServiceSettings = () => {
             </div>
 
             {/* API Key 配置 */}
-            {currentProvider.transport === "codex_bridge" ? (
+            {currentProvider.transport === "web_sync" ? (
+              <div className="p-4 border-b border-gray-200">
+                <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-950 space-y-3">
+                  <div className="font-medium">使用 {webSyncLabel} 网页桥接</div>
+                  <div className="mt-1 text-xs leading-relaxed">
+                    该 provider 通过已登录的 {webSyncLabel} 网页标签页发送消息，不需要 API Key。它独立于 API 和 Codex Bridge，使用网页当前选中的模型。
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={openWebSyncPage}
+                      variant="outline"
+                      className="shrink-0"
+                    >
+                      <ExternalLink className="h-4 w-4 mr-2" />
+                      打开网页
+                    </Button>
+
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={refreshWebSyncStatus}
+                      disabled={webSyncStatus === "checking"}
+                      className="shrink-0 bg-emerald-600 hover:bg-emerald-700 text-white"
+                    >
+                      {webSyncStatus === "checking" ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <PlugZap className="h-4 w-4 mr-2" />
+                      )}
+                      检测连接
+                    </Button>
+
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={resetWebSyncRole}
+                      className="shrink-0"
+                      title="下一次提问重新发送前置角色规则"
+                    >
+                      <RotateCcw className="h-4 w-4 mr-2" />
+                      重发规则
+                    </Button>
+                  </div>
+
+                  {webSyncMessage && (
+                    <div className={cn(
+                      "text-xs",
+                      webSyncStatus === "connected" ? "text-green-700" : "text-emerald-900"
+                    )}>
+                      {webSyncMessage}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : currentProvider.transport === "codex_bridge" ? (
               <div className="p-4 border-b border-gray-200">
                 <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900 space-y-3">
                   <div className="font-medium">使用本地 Codex Bridge</div>
@@ -352,12 +468,20 @@ export const ModelServiceSettings = () => {
 
             {/* 模型管理 */}
             <div className="flex-1 flex flex-col min-h-0">
-              <div className="p-4 border-b border-gray-200 flex items-center justify-between">
-                <h4 className="text-sm font-medium text-gray-800">模型管理</h4>
+              <div className="p-4 border-b border-gray-200 flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <h4 className="text-sm font-medium text-gray-800">模型管理</h4>
+                  {isWebSyncProvider && (
+                    <div className="mt-1 text-xs text-gray-500">
+                      当前模型在 {webSyncLabel} 网页版中选择
+                    </div>
+                  )}
+                </div>
                 <Button
                   onClick={() => setShowAddModel(true)}
                   size="sm"
                   variant="outline"
+                  className="shrink-0"
                 >
                   <Plus className="h-4 w-4 mr-2" />
                   添加模型
@@ -390,6 +514,11 @@ export const ModelServiceSettings = () => {
                             <div className="text-xs text-gray-500 truncate leading-tight">
                               {model.model_name}
                             </div>
+                            {model.transport === "web_sync" && (
+                              <div className="text-xs text-emerald-700 leading-tight">
+                                当前模型在 {webSyncLabel} 网页版中选择
+                              </div>
+                            )}
                           </div>
 
                           {/* 标识 */}

@@ -72,7 +72,7 @@ export const ModelParamsSettings = () => {
           <div className="mb-3">
             <Label className="text-sm font-medium text-gray-800">Codex reasoning effort</Label>
             <p className="text-xs text-gray-500 mt-1">
-              Used only by ChatGPT Pro (Codex) through the local bridge.
+              Used only by Codex through the local bridge.
             </p>
           </div>
 

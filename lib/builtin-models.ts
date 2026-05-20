@@ -9,7 +9,7 @@ export interface BaseModelConfig {
   image_resolution_threshold?: number
   // API格式类型
   api_format?: 'openai' | 'gemini' | 'claude'
-  transport?: 'openai_chat' | 'codex_bridge'
+  transport?: 'openai_chat' | 'codex_bridge' | 'web_sync'
 }
 
 // 完整模型配置接口（包含运行时配置）
@@ -23,16 +23,30 @@ export const builtinModels: BaseModelConfig[] = [
   {
     model_name: "gpt-5.4",
     display_name: "GPT-5.4 (Codex)",
-    provider: "ChatGPT Pro (Codex)",
+    provider: "Codex",
     multimodal: true,
     transport: "codex_bridge",
   },
   {
     model_name: "gpt-5.5",
     display_name: "GPT-5.5 (Codex)",
-    provider: "ChatGPT Pro (Codex)",
+    provider: "Codex",
     multimodal: true,
     transport: "codex_bridge",
+  },
+  {
+    model_name: "chatgpt-web-current",
+    display_name: "ChatGPT Web",
+    provider: "ChatGPT Web",
+    multimodal: false,
+    transport: "web_sync",
+  },
+  {
+    model_name: "deepseek-web-current",
+    display_name: "DeepSeek Web",
+    provider: "DeepSeek Web",
+    multimodal: false,
+    transport: "web_sync",
   },
 
   // 硅基流动模型
