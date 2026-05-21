@@ -7,7 +7,7 @@ $ErrorActionPreference = "Stop"
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $buildDir = Join-Path $repoRoot "build\chrome-mv3-prod"
 $distDir = Join-Path $repoRoot "dist"
-$releaseRoot = Join-Path $distDir "ChatOverleafExtended-Friend-Release"
+$releaseRoot = Join-Path $distDir "ChatOverleafExtended-Release"
 $packageRoot = Join-Path $releaseRoot "ChatOverleafExtended"
 $zipStageRoot = Join-Path $distDir "_zip-stage"
 $zipStagePackageRoot = Join-Path $zipStageRoot "ChatOverleafExtended"
@@ -211,7 +211,7 @@ Read-Host "Press Enter to close"
 '@
 
 $readme = @'
-Chat Overleaf Extended Friend Release
+Chat Overleaf Extended Release
 ==========================
 
 Quick install
@@ -269,16 +269,12 @@ Set-Content -Path (Join-Path $packageRoot "install.ps1") -Value $installScript -
 Set-Content -Path (Join-Path $packageRoot "uninstall.ps1") -Value $uninstallScript -Encoding UTF8
 Set-Content -Path (Join-Path $packageRoot "README.txt") -Value $readme -Encoding UTF8
 
-$fullZip = Join-Path $distDir "ChatOverleafExtended-Friend-Release.zip"
-$extensionZip = Join-Path $distDir "ChatOverleafExtended-Extension-Only.zip"
-if (Test-Path $fullZip) { Remove-Item -LiteralPath $fullZip -Force }
-if (Test-Path $extensionZip) { Remove-Item -LiteralPath $extensionZip -Force }
+$releaseZip = Join-Path $distDir "ChatOverleafExtended-Release.zip"
+if (Test-Path $releaseZip) { Remove-Item -LiteralPath $releaseZip -Force }
 
 New-Item -ItemType Directory -Path $zipStageRoot -Force | Out-Null
 Copy-Item -Path $packageRoot -Destination $zipStageRoot -Recurse -Force
-Compress-Archive -Path (Join-Path $zipStagePackageRoot "*") -DestinationPath $fullZip -Force
-Compress-Archive -Path (Join-Path $extensionDir "*") -DestinationPath $extensionZip -Force
+Compress-Archive -Path (Join-Path $zipStagePackageRoot "*") -DestinationPath $releaseZip -Force
 Remove-Item -LiteralPath $zipStageRoot -Recurse -Force
 
-Write-Host "Created full friend release: $fullZip"
-Write-Host "Created extension-only zip: $extensionZip"
+Write-Host "Created release: $releaseZip"
