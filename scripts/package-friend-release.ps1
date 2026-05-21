@@ -7,10 +7,10 @@ $ErrorActionPreference = "Stop"
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $buildDir = Join-Path $repoRoot "build\chrome-mv3-prod"
 $distDir = Join-Path $repoRoot "dist"
-$releaseRoot = Join-Path $distDir "OverleafGPT-Friend-Release"
-$packageRoot = Join-Path $releaseRoot "OverleafGPT"
+$releaseRoot = Join-Path $distDir "ChatOverleafExtended-Friend-Release"
+$packageRoot = Join-Path $releaseRoot "ChatOverleafExtended"
 $zipStageRoot = Join-Path $distDir "_zip-stage"
-$zipStagePackageRoot = Join-Path $zipStageRoot "OverleafGPT"
+$zipStagePackageRoot = Join-Path $zipStageRoot "ChatOverleafExtended"
 $extensionDir = Join-Path $packageRoot "extension"
 $bridgeDir = Join-Path $packageRoot "bridge"
 $scriptsDir = Join-Path $packageRoot "scripts"
@@ -48,7 +48,7 @@ $installBat = @'
 @echo off
 setlocal
 cd /d "%~dp0"
-echo Starting OverleafGPT installer...
+echo Starting Chat Overleaf Extended installer...
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0install.ps1"
 echo.
 echo Installer exited with code %ERRORLEVEL%.
@@ -154,7 +154,7 @@ try {
   Open-ExtensionInstructions
 
   Write-Host ""
-  Write-Host "Install helper finished. Keep this OverleafGPT folder in place; the Codex Bridge launcher points to it." -ForegroundColor Green
+  Write-Host "Install helper finished. Keep this ChatOverleafExtended folder in place; the Codex Bridge launcher points to it." -ForegroundColor Green
   Write-Host "Install log: $installLog" -ForegroundColor Green
   $completed = $true
 } catch {
@@ -211,7 +211,7 @@ Read-Host "Press Enter to close"
 '@
 
 $readme = @'
-OverleafGPT Friend Release
+Chat Overleaf Extended Friend Release
 ==========================
 
 Quick install
@@ -238,7 +238,7 @@ The Codex provider uses the user's own local Codex login. If Codex is not logged
 
   codex login
 
-Then open OverleafGPT settings -> Model Service -> Codex -> Connect to local Codex.
+Then open Chat Overleaf Extended settings -> Model Service -> Codex -> Connect to local Codex.
 
 ChatGPT Web / DeepSeek Web provider
 -----------------------------------
@@ -248,13 +248,14 @@ Open and log in to ChatGPT or DeepSeek in the same browser:
   https://chatgpt.com/
   https://chat.deepseek.com/
 
-Then select ChatGPT Web or DeepSeek Web inside OverleafGPT.
+Then select ChatGPT Web or DeepSeek Web inside Chat Overleaf Extended.
 
 Do not share private files
 --------------------------
 
 This package does not include your .env, node_modules, logs, API keys, or login tokens.
 Each user must log in with their own Codex/ChatGPT/DeepSeek account.
+The local Codex Bridge listens on 127.0.0.1 and requires a short-lived pairing nonce plus a local bridge token before chat/model endpoints can be used.
 
 Uninstall
 ---------
@@ -268,8 +269,8 @@ Set-Content -Path (Join-Path $packageRoot "install.ps1") -Value $installScript -
 Set-Content -Path (Join-Path $packageRoot "uninstall.ps1") -Value $uninstallScript -Encoding UTF8
 Set-Content -Path (Join-Path $packageRoot "README.txt") -Value $readme -Encoding UTF8
 
-$fullZip = Join-Path $distDir "OverleafGPT-Friend-Release.zip"
-$extensionZip = Join-Path $distDir "OverleafGPT-Extension-Only.zip"
+$fullZip = Join-Path $distDir "ChatOverleafExtended-Friend-Release.zip"
+$extensionZip = Join-Path $distDir "ChatOverleafExtended-Extension-Only.zip"
 if (Test-Path $fullZip) { Remove-Item -LiteralPath $fullZip -Force }
 if (Test-Path $extensionZip) { Remove-Item -LiteralPath $extensionZip -Force }
 

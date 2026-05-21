@@ -25,7 +25,8 @@ import {
   setModelTemperature,
   setMaxTokens,
   setCodexReasoningEffort,
-  setCodexContextMode
+  setCodexContextMode,
+  setCodexBridgeToken
 } from "~store/slices/settings.slice"
 import type { CodexContextMode, CodexReasoningEffort } from "~store/types"
 
@@ -47,7 +48,8 @@ export const useSettings = () => {
     modelTemperature = 0.36,
     maxTokens = 16384,
     codexReasoningEffort = "medium",
-    codexContextMode = "lightmemory"
+    codexContextMode = "lightmemory",
+    codexBridgeToken = ""
   } = settingsState || {}
 
   // 初始化设置 - 使用新的供应商配置系统
@@ -87,7 +89,15 @@ export const useSettings = () => {
   const getModelConfig = (model: ModelConfig): ModelConfig => {
     // 所有模型（内置和自定义）现在都通过统一的方式获取配置
     // 在 useModels 中已经处理了配置合并，这里直接返回
-    return model
+    const provider = builtinProviders.find(p => p.name === model.provider) ||
+      customProviders.find(p => p.name === model.provider || p.id === (model as any).providerId)
+
+    return {
+      ...model,
+      base_url: provider?.baseUrl || model.base_url,
+      api_key: apiKeys[model.provider] || (provider ? apiKeys[provider.id] : "") || model.api_key || "",
+      bridge_token: model.transport === "codex_bridge" ? codexBridgeToken : (model as any).bridge_token
+    }
   }
 
   // 检查模型是否可用（有 API key 和 base URL）
@@ -125,6 +135,7 @@ export const useSettings = () => {
     maxTokens,
     codexReasoningEffort,
     codexContextMode,
+    codexBridgeToken,
 
     // 方法
     setApiKey: (provider: string, apiKey: string) =>
@@ -164,6 +175,8 @@ export const useSettings = () => {
       dispatch(setCodexReasoningEffort(value)),
     setCodexContextMode: (value: CodexContextMode) =>
       dispatch(setCodexContextMode(value)),
+    setCodexBridgeToken: (value: string) =>
+      dispatch(setCodexBridgeToken(value)),
     isProviderEnabled,
     initializeSettings,
     getModelConfig,

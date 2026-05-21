@@ -3,7 +3,7 @@
 import { createServer, request } from "node:http"
 import { spawn } from "node:child_process"
 import { createInterface } from "node:readline"
-import { createHash, randomBytes } from "node:crypto"
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto"
 import { mkdir, readFile, writeFile } from "node:fs/promises"
 import { existsSync } from "node:fs"
 import { join } from "node:path"
@@ -15,8 +15,14 @@ const REQUEST_TIMEOUT_MS = 60_000
 const TURN_TIMEOUT_MS = 300_000
 const IMAGE_DIR = join(tmpdir(), "overleafgpt-codex-bridge-images")
 const CODEX_MODELS_CACHE = join(homedir(), ".codex", "models_cache.json")
+const BRIDGE_STATE_DIR = join(homedir(), ".overleafgpt")
+const BRIDGE_TOKEN_FILE = join(BRIDGE_STATE_DIR, "codex-bridge-token.json")
+const BRIDGE_PAIRING_FILE = join(BRIDGE_STATE_DIR, "codex-bridge-pairing.json")
 const CODEX_REASONING_LEVELS = new Set(["low", "medium", "high", "xhigh"])
 const CODEX_SESSION_TTL_MS = 12 * 60 * 60 * 1000
+const PAIRING_TTL_MS = 2 * 60 * 1000
+const STARTUP_PAIRING_NONCE = process.env.OVERLEAFGPT_CODEX_BRIDGE_PAIRING_NONCE || ""
+const STARTUP_PAIRING_EXPIRES_AT = Number(process.env.OVERLEAFGPT_CODEX_BRIDGE_PAIRING_EXPIRES_AT || 0)
 
 class CodexAppServer {
   constructor() {
@@ -76,7 +82,7 @@ class CodexAppServer {
       await this.send("initialize", {
         clientInfo: {
           name: "overleafgpt-codex-bridge",
-          title: "OverleafGPT Codex Bridge",
+          title: "Chat Overleaf Extended Codex Bridge",
           version: "0.1.0",
         },
         capabilities: { experimentalApi: true },
@@ -177,6 +183,81 @@ class CodexAppServer {
 
 const codex = new CodexAppServer()
 const codexThreadSessions = new Map()
+const bridgeTokenPromise = getOrCreateBridgeToken()
+let registeredPairingNonce = { nonce: "", expiresAt: 0 }
+
+async function getOrCreateBridgeToken() {
+  await mkdir(BRIDGE_STATE_DIR, { recursive: true })
+
+  try {
+    const raw = await readFile(BRIDGE_TOKEN_FILE, "utf8")
+    const payload = JSON.parse(raw)
+    if (typeof payload.token === "string" && payload.token.length >= 32) {
+      return payload.token
+    }
+  } catch {
+    // Missing or invalid token files are replaced with a new local token.
+  }
+
+  const token = randomBytes(32).toString("base64url")
+  await writeFile(
+    BRIDGE_TOKEN_FILE,
+    JSON.stringify({ token, created_at: new Date().toISOString() }, null, 2),
+    "utf8"
+  )
+  return token
+}
+
+function constantTimeTokenEquals(left, right) {
+  if (typeof left !== "string" || typeof right !== "string") return false
+  const leftBuffer = Buffer.from(left)
+  const rightBuffer = Buffer.from(right)
+  if (leftBuffer.length !== rightBuffer.length) return false
+  return timingSafeEqual(leftBuffer, rightBuffer)
+}
+
+function getRequestToken(req) {
+  const headerToken = req.headers["x-overleafgpt-bridge-token"]
+  if (typeof headerToken === "string" && headerToken.trim()) {
+    return headerToken.trim()
+  }
+
+  const authorization = req.headers.authorization
+  const match = typeof authorization === "string"
+    ? /^Bearer\s+(.+)$/i.exec(authorization)
+    : null
+  return match ? match[1].trim() : ""
+}
+
+async function hasValidBridgeToken(req) {
+  const expected = await bridgeTokenPromise
+  return constantTimeTokenEquals(getRequestToken(req), expected)
+}
+
+async function requireBridgeToken(req, res) {
+  if (await hasValidBridgeToken(req)) return true
+  json(res, 401, {
+    error: "Unauthorized Codex Bridge request. Click Connect to local Codex in Chat Overleaf Extended settings to pair this browser extension."
+  }, req)
+  return false
+}
+
+function isAllowedBrowserOrigin(origin) {
+  if (!origin) return true
+  if (origin.startsWith("chrome-extension://")) return true
+  if (origin.startsWith("moz-extension://")) return true
+  if (origin === "https://www.overleaf.com") return true
+  if (/^https:\/\/[^/]+\.overleaf\.com$/i.test(origin)) return true
+  return false
+}
+
+function isPairingOrigin(origin) {
+  if (!origin) return true
+  if (origin.startsWith("chrome-extension://")) return true
+  if (origin === "https://www.overleaf.com") return true
+  if (/^https:\/\/[^/]+\.overleaf\.com$/i.test(origin)) return true
+  return false
+}
 
 function resolveCodexLaunch() {
   const explicit = process.env.CODEX_PATH?.trim()
@@ -258,10 +339,15 @@ async function readCodexModels() {
     .filter((model) => model.id)
 }
 
-function setCorsHeaders(res) {
-  res.setHeader("Access-Control-Allow-Origin", "*")
+function setCorsHeaders(req, res) {
+  if (!req) return
+  const origin = req?.headers?.origin
+  if (isAllowedBrowserOrigin(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin || "*")
+  }
+  res.setHeader("Vary", "Origin")
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type,Accept")
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type,Accept,Authorization,X-OverleafGPT-Bridge-Token")
 }
 
 function readJsonBody(req) {
@@ -285,8 +371,8 @@ function readJsonBody(req) {
   })
 }
 
-function json(res, status, payload) {
-  setCorsHeaders(res)
+function json(res, status, payload, req) {
+  setCorsHeaders(req, res)
   res.writeHead(status, { "Content-Type": "application/json; charset=utf-8" })
   res.end(JSON.stringify(payload))
 }
@@ -667,7 +753,7 @@ function waitForTurn({ threadId, turnId, callbacks }) {
 
 async function handleStream(req, res) {
   const body = await readJsonBody(req)
-  setCorsHeaders(res)
+  setCorsHeaders(req, res)
   res.writeHead(200, {
     "Content-Type": "text/event-stream; charset=utf-8",
     "Cache-Control": "no-cache, no-transform",
@@ -700,7 +786,79 @@ async function handleJsonChat(req, res) {
   const text = await runCodexTurn(body)
   json(res, 200, {
     choices: [{ message: { role: "assistant", content: text } }],
-  })
+  }, req)
+}
+
+async function readPairingNonce() {
+  if (
+    STARTUP_PAIRING_NONCE &&
+    STARTUP_PAIRING_EXPIRES_AT &&
+    STARTUP_PAIRING_EXPIRES_AT > Date.now()
+  ) {
+    return {
+      nonce: STARTUP_PAIRING_NONCE,
+      expiresAt: STARTUP_PAIRING_EXPIRES_AT,
+    }
+  }
+
+  if (registeredPairingNonce.nonce && registeredPairingNonce.expiresAt > Date.now()) {
+    return registeredPairingNonce
+  }
+
+  try {
+    const raw = await readFile(BRIDGE_PAIRING_FILE, "utf8")
+    const payload = JSON.parse(raw)
+    return {
+      nonce: typeof payload.nonce === "string" ? payload.nonce : "",
+      expiresAt: typeof payload.expires_at === "string" ? Date.parse(payload.expires_at) : 0,
+    }
+  } catch {
+    return { nonce: "", expiresAt: 0 }
+  }
+}
+
+async function handlePairBridge(req, res) {
+  const origin = req.headers.origin
+  if (!isPairingOrigin(origin)) {
+    json(res, 403, { error: "Pairing is only allowed from the Chat Overleaf Extended browser extension." }, req)
+    return
+  }
+
+  const body = await readJsonBody(req)
+  const nonce = typeof body.nonce === "string" ? body.nonce.trim() : ""
+  const expected = await readPairingNonce()
+  const nonceIsFresh = expected.expiresAt && expected.expiresAt > Date.now()
+  if (!nonce || !nonceIsFresh || !constantTimeTokenEquals(nonce, expected.nonce)) {
+    json(res, 403, {
+      error: "Invalid or expired Codex Bridge pairing nonce. Click Connect to local Codex again."
+    }, req)
+    return
+  }
+
+  json(res, 200, {
+    ok: true,
+    service: "overleafgpt-codex-bridge",
+    token: await bridgeTokenPromise,
+    expires_in_ms: PAIRING_TTL_MS,
+  }, req)
+}
+
+async function handleRegisterPairing(req, res) {
+  if (req.headers.origin) {
+    json(res, 403, { error: "Pairing nonce registration is only allowed from the local launcher." }, req)
+    return
+  }
+
+  const body = await readJsonBody(req)
+  const nonce = typeof body.nonce === "string" ? body.nonce.trim() : ""
+  const expiresAt = Number(body.expires_at || 0)
+  if (!nonce || !expiresAt || expiresAt <= Date.now()) {
+    json(res, 400, { error: "Invalid pairing nonce registration payload." }, req)
+    return
+  }
+
+  registeredPairingNonce = { nonce, expiresAt }
+  json(res, 200, { ok: true, expires_at: expiresAt }, req)
 }
 
 async function handleResetCodexSession(req, res) {
@@ -708,13 +866,13 @@ async function handleResetCodexSession(req, res) {
   const sessionId = normalizeSessionId(body.session_id || body.codex_session_id)
   if (sessionId) {
     const removed = codexThreadSessions.delete(sessionId)
-    json(res, 200, { ok: true, removed, session_id: sessionId })
+    json(res, 200, { ok: true, removed, session_id: sessionId }, req)
     return
   }
 
   const removed = codexThreadSessions.size
   codexThreadSessions.clear()
-  json(res, 200, { ok: true, removed })
+  json(res, 200, { ok: true, removed }, req)
 }
 
 async function handleCodexMemoryCheck(req, res) {
@@ -764,7 +922,7 @@ async function handleCodexMemoryCheck(req, res) {
       nonce,
       first_response: firstResponse,
       second_response: secondResponse,
-    })
+    }, req)
   } finally {
     codexThreadSessions.delete(sessionId)
   }
@@ -772,25 +930,44 @@ async function handleCodexMemoryCheck(req, res) {
 
 const server = createServer(async (req, res) => {
   try {
-    setCorsHeaders(res)
+    setCorsHeaders(req, res)
+    const url = new URL(req.url || "/", `http://${HOST}:${PORT}`)
+    const path = url.pathname
+
     if (req.method === "OPTIONS") {
       res.writeHead(204)
       res.end()
       return
     }
 
-    if (req.method === "GET" && req.url === "/health") {
-      json(res, 200, { ok: true, service: "overleafgpt-codex-bridge" })
+    if (req.method === "GET" && path === "/health") {
+      json(res, 200, {
+        ok: true,
+        service: "overleafgpt-codex-bridge",
+        requires_auth: true,
+      }, req)
       return
     }
 
-    if (req.method === "GET" && req.url === "/v1/models") {
+    if (req.method === "POST" && path === "/v1/bridge/pair") {
+      await handlePairBridge(req, res)
+      return
+    }
+
+    if (req.method === "POST" && path === "/v1/bridge/register-pairing") {
+      await handleRegisterPairing(req, res)
+      return
+    }
+
+    if (!(await requireBridgeToken(req, res))) return
+
+    if (req.method === "GET" && path === "/v1/models") {
       const models = await readCodexModels()
-      json(res, 200, { object: "list", data: models })
+      json(res, 200, { object: "list", data: models }, req)
       return
     }
 
-    if (req.method === "GET" && req.url === "/v1/codex/sessions") {
+    if (req.method === "GET" && path === "/v1/codex/sessions") {
       pruneCodexThreadSessions()
       json(res, 200, {
         object: "list",
@@ -800,35 +977,35 @@ const server = createServer(async (req, res) => {
           created_at: new Date(session.createdAt).toISOString(),
           last_used_at: new Date(session.lastUsedAt).toISOString(),
         })),
-      })
+      }, req)
       return
     }
 
-    if (req.method === "POST" && req.url === "/v1/codex/session/reset") {
+    if (req.method === "POST" && path === "/v1/codex/session/reset") {
       await handleResetCodexSession(req, res)
       return
     }
 
-    if (req.method === "POST" && req.url === "/v1/codex/memory-check") {
+    if (req.method === "POST" && path === "/v1/codex/memory-check") {
       await handleCodexMemoryCheck(req, res)
       return
     }
 
-    if (req.method === "POST" && req.url === "/v1/chat/stream") {
+    if (req.method === "POST" && path === "/v1/chat/stream") {
       await handleStream(req, res)
       return
     }
 
-    if (req.method === "POST" && req.url === "/v1/chat") {
+    if (req.method === "POST" && path === "/v1/chat") {
       await handleJsonChat(req, res)
       return
     }
 
-    json(res, 404, { error: "Not found" })
+    json(res, 404, { error: "Not found" }, req)
   } catch (error) {
     json(res, 500, {
       error: error instanceof Error ? error.message : String(error),
-    })
+    }, req)
   }
 })
 
@@ -841,8 +1018,12 @@ server.on("error", async (error) => {
   const healthUrl = `http://${HOST}:${PORT}/health`
   const existingService = await fetchJson(healthUrl).catch(() => null)
   if (existingService?.service === "overleafgpt-codex-bridge") {
-    console.error(`OverleafGPT Codex Bridge is already running at ${healthUrl}.`)
-    console.error("You can keep using the existing bridge, or stop the old process before starting a new one.")
+    console.error(`Chat Overleaf Extended Codex Bridge is already running at ${healthUrl}.`)
+    if (existingService.requires_auth === true) {
+      console.error("You can keep using the existing secure bridge, or stop the old process before starting a new one.")
+    } else {
+      console.error("The running bridge appears to be an older version without secure pairing. Stop it, then start the new bridge.")
+    }
   } else {
     console.error(`Port ${PORT} on ${HOST} is already in use by another process.`)
     console.error("Close the application using this port, or free it from PowerShell:")
@@ -882,6 +1063,6 @@ async function fetchJson(url) {
 }
 
 server.listen(PORT, HOST, () => {
-  console.log(`OverleafGPT Codex Bridge listening at http://${HOST}:${PORT}`)
+  console.log(`Chat Overleaf Extended Codex Bridge listening at http://${HOST}:${PORT}`)
   console.log("Run `codex login` before using Codex models.")
 })

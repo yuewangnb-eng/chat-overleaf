@@ -38,14 +38,14 @@
 
   <rect class="bg" x="0" y="0" width="1600" height="1750"/>
 
-  <text class="title" x="70" y="70">OverleafGPT 提示词传入内容流程图</text>
+  <text class="title" x="70" y="70">Chat Overleaf Extended 提示词传入内容流程图</text>
   <text class="subtitle" x="70" y="105">按实际传入内容标题说明：系统角色规则、历史对话信息、当前 Overleaf 上下文、当前用户请求。</text>
 
   <rect class="core" x="70" y="145" width="1460" height="250"/>
   <text class="section" x="100" y="185">0. 前端统一采集信息</text>
   <text class="text" x="110" y="225">用户输入：当前问题、当前选中文本、选中文件路径、上传图片</text>
   <text class="text" x="110" y="260">项目上下文：实时项目文件列表、已选择文件内容、当前文件刷新结果</text>
-  <text class="text" x="110" y="295">聊天上下文：当前 OverleafGPT 聊天里的 user / assistant 历史</text>
+  <text class="text" x="110" y="295">聊天上下文：当前 Chat Overleaf Extended 聊天里的 user / assistant 历史</text>
   <text class="text" x="110" y="330">统一基础结构：先生成 chatHistory，再按 provider 类型决定最终实际传入内容</text>
 
   <rect class="prompt" x="870" y="205" width="600" height="145"/>
@@ -105,7 +105,7 @@
 
   <text class="label" x="1110" y="800">C1. 首次进入某个 Web provider</text>
   <text class="mono" x="1130" y="832">Role instructions: 系统角色规则</text>
-  <text class="mono" x="1130" y="862">Previous OverleafGPT conversation history: 历史对话信息</text>
+  <text class="mono" x="1130" y="862">Previous Chat Overleaf Extended conversation history: 历史对话信息</text>
   <text class="mono" x="1130" y="892">Current Overleaf context: 当前 Overleaf 上下文</text>
   <text class="mono" x="1130" y="922">Current user request: 当前用户请求</text>
 

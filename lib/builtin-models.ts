@@ -16,6 +16,7 @@ export interface BaseModelConfig {
 export interface ModelConfig extends BaseModelConfig {
   base_url: string
   api_key: string
+  bridge_token?: string
 }
 
 // 内置模型配置 - 只包含模型基本信息，运行时配置通过供应商获取

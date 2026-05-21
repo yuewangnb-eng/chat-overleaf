@@ -1,310 +1,119 @@
-<p align="center">
-  <img src="./assets/icon.png" alt="Chat Overleaf Logo" width="96" />
-</p>
+# Chat Overleaf Extended
 
-<h1 align="center">Chat Overleaf ✨</h1>
+本项目是 [anuin-cat/chat-overleaf](https://github.com/anuin-cat/chat-overleaf) 的 extended fork，在原项目基础上增加了新的模型调用方式：Codex provider、ChatGPT/DeepSeek Web provider; 优化了上下文管理规则以减少Token消耗。
 
-<p align="center"><b>Overleaf AI 助手 | 基于 Plasmo 的 Overleaf AI 对话助手</b></p>
+## 原项目简介
 
-<p align="center">
-  <a href="https://chromewebstore.google.com/detail/chat-overleaf/anofakjncihlgcmndcdipflonpgcgdmk">
-    <img src="https://img.shields.io/badge/Chrome-商店安装-4285F4?style=for-the-badge&logo=googlechrome&logoColor=white" alt="Chrome Web Store" />
-  </a>
-</p>
+原项目 Chat Overleaf 是一个基于 Plasmo 构建的浏览器扩展，用于在 Overleaf 页面中提供基于大语言模型的问答和写作助手。
 
----
+原项目主要功能包括：
 
-## 📥 安装方式
+- 在 Overleaf 页面中打开侧边栏和LLM对话
+- 支持选中编辑器文本后提问、润色
+- 支持读取当前项目文件和文件树作为上下文
+- 支持多模型供应商配置
+- 支持图片输入
+- 支持对话历史
+- 支持根据LLM的输出的替换、插入、新建文件指令修改 LaTeX 文件
 
-### 方式一：Chrome 商店安装（推荐）
+原项目地址：
 
-直接从 Chrome 网上应用店安装：
+https://github.com/anuin-cat/chat-overleaf
 
-👉 [**点击安装 Chat Overleaf**](https://chromewebstore.google.com/detail/chat-overleaf/anofakjncihlgcmndcdipflonpgcgdmk)
+## 本版本新增功能
 
-### 方式二：手动加载 zip（暂停更新）
+本版本在原项目基础上新增和调整了以下能力：
 
-1. 下载 GitHub Releases 中的 zip 文件并解压
+- 新增 Codex provider，可通过本地 Codex Bridge 使用已登录的 Codex / ChatGPT Plus / Pro 能力
+- 新增 ChatGPT/DeepSeek Web provider，通过已登录的 ChatGPT/DeepSeek 网页进行 WebSync 桥接，可以让 Overleaf 插件中的提问和 ChatGPT/DeepSeek 网页版、和手机版对话同步。
+- 为新的providers提供新的记忆管理和上下文模式，针对原项目基于 API 调用时每轮都需要重复传入系统角色规则、历史对话和上下文信息，导致 token 消耗较高的问题，本版本在 Codex 及 ChatGPT / DeepSeek Web 等具备会话记忆能力的 provider 中，尽量复用模型侧已有记忆，减少重复上下文传输：
+   - 新增 Codex 记忆自检与复用机制：支持在同一 Overleaf 项目、同一聊天会话中复用同一条 Codex thread 记忆，并可通过自检确认记忆复用是否生效。
+   - 新增 WebSync 首次和后续提问的记忆功能，支持同一对话切换 provider 时的上下文补发逻辑
+- 新增长回答折叠 / 展开 UI
 
-2. 在 Chrome 浏览器中加载插件
-   - 打开 Chrome 扩展管理页面（`chrome://extensions/`）
-   - 开启右上角的「开发者模式」
-   - 点击「加载已解压的扩展程序」
-   - 选择解压目录下的 `chrome-mv3-prod` 文件夹
+## 本版本使用方法
 
-3. 完成加载后，访问 Overleaf 网站点击右下角图标即可（注意先添加模型秘钥）
+待补充。
 
----
+## 新增功能说明
 
-## 🚀 基本功能
+### Codex Provider
 
-### 💬 智能对话系统
-- 👥 <b>无缝集成</b>：完美融入 Overleaf 界面，不影响正常编辑体验
-- 📝 <b>选中文本提问</b>：选中编辑器内容即可直接提问，自动作为上下文
-- 📍 <b>自动附带选区来源路径</b>：选中提问时自动附带文件路径/目录信息，方便 AI 精准定位与引用
-- ⌨️ <b>Ctrl + L 快捷唤起</b>：支持全局快捷键与选区浮层按钮，一键打开侧边栏并聚焦输入（可携带当前选中文本/路径）
-- 🖼️ <b>多模态支持</b>：支持图片上传、粘贴和拖拽，实现图文混合对话
-- 📱 <b>响应式设计</b>：支持侧边栏宽度调整，适配不同屏幕尺寸
-- 💭 <b>思考过程展示</b>：支持显示 AI 的思考过程
+Codex provider 不使用服务商 API key，而是通过本地 Codex Bridge 调用用户本机已经登录的 Codex 环境，通过Codex Bridge 安全配对 token，避免任意本机网页直接调用 bridge，确保连接安全。
 
-### 📁 文件内容管理
-- 📄 <b>智能提取</b>：自动获取当前文件或手动点击即可提取整个项目内容作为 AI 上下文
-- 🌲 <b>文件树视图</b>：以树形结构展示项目文件，支持文件夹展开/折叠
-- 🔄 <b>实时同步</b>：编辑器内容变化时自动更新已提取的文件
-- 📋 <b>文件选择</b>：灵活选择需要包含在对话中的文件
-- 🧾 <b>自动附带文件列表提示</b>：每次提问自动携带最新文件/文件夹列表与 Token 信息，帮助模型理解项目结构（可配合 @ 快捷引用）
-- 💾 <b>文件缓存</b>：按项目 ID 缓存文件列表，避免重复获取
-- 📊 <b>Token 预估</b>：显示选中文件的预估 Token 数量
-- ✅ <b>批量操作</b>：支持全选/清空文件选择
+**基本流程：**
 
-### 💾 对话历史管理
-- 📚 <b>历史记录</b>：自动实时保存对话历史，支持加载和管理多个会话（防止刷新/异常导致丢失）
-- 🌿 <b>分支对话</b>：支持从历史消息创建新的对话分支
-- 🗑️ <b>批量管理</b>：支持删除单个或清空所有历史记录
+1. 用户在本机安装并登录 Codex。
+2. 插件设置中选择 `Codex` provider。
+3. 用户点击设置页中的“连接到本地 Codex”。
+4. 扩展通过 `overleafgpt-codex://` 本地协议启动 Codex Bridge。
+5. Codex Bridge 在本机调用 `codex app-server`。
+6. Chat Overleaf Extended 将当前问题、上下文和必要的历史信息发送到本地 bridge。
+7. bridge 将 Codex 的流式回答转换为 OpenAI Chat Completions 风格的响应返回给扩展。
 
-### 🧠 模型管理
-- 🔧 <b>内置模型</b>：预配置多个主流 AI 模型（DeepSeek、Kimi、Qwen、Gemini 等）
-- ⚙️ <b>自定义模型</b>：支持添加自定义 AI 服务商和模型
-- 📌 <b>模型置顶</b>：常用模型可置顶显示，快速切换
-- 🔍 <b>自动获取模型列表</b>：输入模型 ID 后自动获取对应服务商的模型列表
+**本地 Bridge 安全设计：**
 
-### 🎯 便捷交互
-- ⌨️ <b>@ 快捷引用</b>：使用 @ 符号快速引用文件
-- 🎨 <b>优化的 UI</b>：更紧凑的界面设计，提升使用体验
-
-### 📝 智能插入与差异审阅
-- 🧩 <b>AI 生成替换块</b>：聊天气泡自动渲染搜索/替换 diff，支持正则或普通模式
-- 🚀 <b>一键应用/拒绝</b>：直接将修改写回 Overleaf 编辑器或忽略
-- 👀 <b>智能预览与高亮</b>：自动跳转并高亮待替换区域，支持悬浮浮层内联查看
-- ↩️ <b>撤销应用/撤销拒绝</b>：已应用或已拒绝的修改可恢复为候选并重新高亮
-- 🧷 <b>长文本替换更稳定</b>：提升替换匹配的字符串长度上限，增强大段落 diff 的应用成功率与鲁棒性
-
----
-
-##  界面预览
-
-![Chat Overleaf](./assets/img/example.png)
-![Settings](./assets/img/setting.png)
-![Several](./assets/img/several.png)
-
-
----
-
-## 🛠️ 本地开发
-
-### 环境要求
-- Node.js 16+
-- pnpm
-
-### 开发步骤
-
-1. 克隆项目
-
-   ```bash
-   git clone https://github.com/anuin-cat/chat-overleaf.git
-   cd chat-overleaf
-   ```
-
-2. 安装依赖
-
-   ```bash
-   pnpm install
-   ```
-
-3. 启动开发服务器
-
-   ```bash
-   pnpm dev
-   ```
-
-4. 加载插件到浏览器
-   - 打开 Chrome 扩展管理页面（`chrome://extensions/`）
-   - 开启开发者模式
-   - 点击「加载已解压的扩展程序」
-   - 选择 `build/chrome-mv3-dev` 文件夹
-
-5. 访问 Overleaf 网站测试功能
-
----
-
-## 📦 构建生产版本
-
-```bash
-pnpm build
-```
-
----
-
-## ChatGPT Pro / Codex Bridge
-
-本分支新增了 `Codex` 供应商。它不使用 OpenAI API Key，而是通过本地 Codex CLI 的 `codex app-server` 复用你的 ChatGPT Plus/Pro 登录态。
-
-这套功能分为两部分：
-
-- 浏览器插件：提供 Overleaf 侧 UI、模型选择和请求转发。
-- OverleafGPT Local Connector：运行在用户电脑本地，负责启动 `codex app-server` bridge，并注册 `overleafgpt-codex://` 本地启动协议。
-
-浏览器插件本身不能注册本地协议，也不能直接启动 `node` 进程。因此，只分发浏览器插件是不够的；普通用户还需要先安装 Local Connector。
-
-### 普通用户
-
-1. 安装 Codex CLI 并登录：
-
-   ```bash
-   npm install -g @openai/codex
-   codex login
-   ```
-
-2. 安装 OverleafGPT Local Connector。
-
-   Local Connector 需要完成两件事：安装本地 bridge 文件，并注册 `overleafgpt-codex://` 协议。
-
-3. 加载浏览器插件，打开 Overleaf，进入设置 -> 模型服务 -> `Codex`。
-
-4. 点击 `连接到本地 Codex`。
-
-   如果连接失败，说明 Local Connector 没有安装或协议没有注册成功。插件会提示先安装 OverleafGPT Local Connector。
-
-### 开发者从源码运行
-
-1. 安装依赖：
-
-   ```bash
-   corepack pnpm install
-   ```
-
-2. 安装 Codex CLI 并登录：
-
-   ```bash
-   npm install -g @openai/codex
-   codex login
-   ```
-
-3. 注册本地启动协议：
-
-   ```powershell
-   corepack pnpm register-bridge-protocol
-   ```
-
-   注册后，插件设置页的 `连接到本地 Codex` 按钮会按需启动本地 bridge。
-
-4. 也可以手动启动本地 bridge：
-
-   ```bash
-   corepack pnpm bridge
-   ```
-
-5. 启动扩展开发服务：
-
-   ```bash
-   corepack pnpm dev
-   ```
-
-### 模型和参数
-
-在扩展设置中选择 `Codex`，使用内置的 `GPT-5.4 (Codex)` 或 `GPT-5.5 (Codex)` 模型。也可以在该供应商下点击“添加模型”，模型列表会从本地 Codex 缓存自动读取。
-
-在“对话参数”中设置 `Codex reasoning effort`，可选 `low`、`medium`、`high`、`xhigh`。该参数只会通过本地 bridge 传给 Codex，不影响普通 API 模型。
-
-默认 bridge 地址为 `http://127.0.0.1:17381`。如需修改端口，可设置环境变量 `OVERLEAFGPT_CODEX_BRIDGE_PORT`。
-
----
-
-### Codex Session Memory
-
-Codex Bridge 会按同一个 Overleaf 项目和同一个 OverleafGPT 聊天会话复用同一条 Codex thread：
-
+Codex Bridge 默认只监听：
 ```text
-overleaf:<projectId>:chat:<currentChatId>
+127.0.0.1:17381
 ```
+`/health` 端点保持公开，仅用于判断 bridge 是否正在运行，不返回 token、账号信息或登录凭据。
 
-Codex 模型名不参与这个 session key。因此在同一个聊天里从 `gpt-5.4` 切换到 `gpt-5.5`，仍会沿用原来的 Codex 记忆。
+以下接口需要本地 bridge token：
+- `/v1/models`
+- `/v1/chat`
+- `/v1/chat/stream`
+- `/v1/codex/session/reset`
+- `/v1/codex/memory-check`
+- `/v1/codex/sessions`
 
-某个 session 第一次请求时，bridge 会把当前系统规则和可见的近期聊天上下文发给 Codex，用于初始化 thread。之后同一个 session 的请求会复用 Codex thread，只发送最新 Overleaf 上下文和当前用户问题，避免每轮重复传旧历史，同时仍然每轮刷新项目文件信息。
+1. 用户点击“连接到本地 Codex”。
+2. 扩展生成一次性 `nonce`。
+3. 扩展打开 `overleafgpt-codex://start?nonce=...`。
+4. 本地启动脚本把 nonce 传给 bridge。
+5. 扩展调用 `/v1/bridge/pair`。
+6. bridge 校验 nonce。
+7. 校验通过后返回本地 bridge token。
+8. 扩展保存 token。
+9. 后续 Codex 请求都会自动带上 `X-OverleafGPT-Bridge-Token`。
 
-本地自检端点：
+### ChatGPT Web / DeepSeek Web Provider
 
-```bash
-curl http://127.0.0.1:17381/v1/codex/sessions
-curl -X POST http://127.0.0.1:17381/v1/codex/memory-check -H "Content-Type: application/json" -d "{\"model\":\"gpt-5.4\",\"reasoning_effort\":\"medium\"}"
-curl -X POST http://127.0.0.1:17381/v1/codex/session/reset -H "Content-Type: application/json" -d "{}"
-```
+WebSync provider 独立于 API provider 和 Codex Bridge。
 
-如果启动 bridge 时提示端口 `17381` 被占用，通常有两种情况：
+它不需要 API key，而是把 Chat Overleaf Extended 中的一次请求转发到已经登录的 ChatGPT 或 DeepSeek 网页标签页，再把网页生成的回答同步回 Chat Overleaf Extended。
 
-- 已经有一个 OverleafGPT Codex Bridge 在运行：可以直接继续使用，不需要重复启动。
-- 其他程序占用了端口：关闭占用端口的程序，或在 PowerShell 中释放端口后重新启动 bridge。
 
-```powershell
-Get-NetTCPConnection -LocalAddress 127.0.0.1 -LocalPort 17381 |
-  Select-Object -ExpandProperty OwningProcess -Unique |
-  ForEach-Object { Stop-Process -Id $_ }
 
-corepack pnpm bridge
-```
+### Codex/Web Providers 记忆方式及上下文管理
 
----
+原项目主要基于 API 接口调用模型。为了让模型理解任务，每次请求通常都需要重新传入系统角色规则、选中文件内容和历史对话信息；当项目文件较多或对话较长时，这会造成明显的 token 消耗。
 
-## WebChat / web_sync Provider
+本版本优化了插件记忆管理和上下文传输逻辑。对于 Codex 和 ChatGPT / DeepSeek Web 这类具备会话记忆能力的 provider，插件会尽量利用模型侧已有的会话记忆，减少重复发送固定规则和历史上下文。
 
-本分支新增独立的 `web_sync` provider：
+#### Codex 记忆方式及上下文管理
+Codex Bridge 会按同一个 Overleaf 项目和同一个聊天会话复用同一条 Codex thread 记忆，并提供记忆自检能力，用于确认 thread 复用是否真的生效。
 
-- `ChatGPT Web`
-- `DeepSeek Web`
+#### Web Providers 记忆方式及上下文管理
+**首次**使用某个 Web provider 时，发送角色规则、历史对话、当前 Overleaf 上下文和当前用户请求。**后续**连续使用同一个 Web provider 时，只发送当前 Overleaf 上下文和当前用户请求。
 
-它们不使用服务商 API Key，也不依赖 `Codex` / Codex Bridge。扩展会把 OverleafGPT 中的一次提问转发到已经打开并登录的 ChatGPT 或 DeepSeek 网页标签页，再把网页生成的回答流式返回到 OverleafGPT。
+#### 统一项目统一对话切换 providers 的记忆方式
 
-### 使用方式
+- 切换 Codex 内的模型，例如从 `gpt-5.4` 切到 `gpt-5.5`，不会自动开启新的记忆；仍复用当前项目和当前聊天对应的 Codex thread。
+- 从其他 provider 切回 Codex 提供两种上下文模式：
+   - `Light Memory`：复用 Codex thread 后，不传入对话全部历史记录；
+   - `Full Memory`：复用 Codex thread 的同时，每轮仍传入全部聊天历史；
+- 从其他 provider 切回 Web provider 时，补发历史对话和当前上下文，避免网页侧忘记中间发生的对话。
 
-1. 在同一个浏览器中打开并登录：
-   - ChatGPT: `https://chatgpt.com/`
-   - DeepSeek: `https://chat.deepseek.com/`
-2. 回到 Overleaf，打开 OverleafGPT 设置。
-3. 在“模型服务”中选择 `ChatGPT Web` 或 `DeepSeek Web`。
-4. 点击“检测网页连接”，确认扩展能看到对应 WebChat 标签页。
-5. 在模型列表中选择：
-   - `ChatGPT Web`
-   - `DeepSeek Web`
-   当前具体模型在 ChatGPT / DeepSeek 网页版中选择。
-6. 正常提问即可。
+**记忆管理流程图见：**
 
-### 设计边界
+![Chat Overleaf Extended 提示词传入内容流程图](docs/prompt-flowchart.svg)
 
-- `web_sync` 是单独 transport，不会影响普通 API provider，也不会影响 `Codex`。
-- 第一版使用网页当前选中的模型，不自动切换网页模型。
-- 第一版只把本次 OverleafGPT 请求投递到 WebChat 页面，不读取历史记录。
-- ChatGPT / DeepSeek 网页可能把这次对话保存在各自网页历史中，但这取决于网页账号设置、临时聊天设置和服务商策略。
-- 该方案依赖网页 DOM，ChatGPT / DeepSeek 页面结构变化时可能需要更新 content script。
 
-### 权限说明
+### 长回答折叠
 
-为了实现网页桥接，扩展需要增加以下页面权限：
+当助手回答内容较长时，消息区域会显示“折叠回答 / 展开回答”按钮。默认仍展示完整回答，用户可手动折叠长回答以减少侧边栏占用空间。流式输出过程中不会显示折叠按钮，回答完成后才判断是否需要显示。
 
-- `https://chatgpt.com/*`
-- `https://chat.openai.com/*`
-- `https://chat.deepseek.com/*`
 
-这些权限仅用于用户选择 `ChatGPT Web` / `DeepSeek Web` provider 时向对应网页发送问题并读取本次回复。
 
----
-
-## 📋 TODO
-
-- [x] ✍️ 支持添加编辑器选中内容对话
-- [x] 💾 添加对话历史持久化
-- [x] 🔄 支持当前编辑器内容自动更新
-- [x] 🧩 优化上下文选中逻辑
-- [ ] 📝 支持自定义 prompt 模板
-- [x] 🛠️ 支持自定义添加模型
-- [x] 🖼️ 支持图文问答
-- [x] 🌲 文件树视图展示
-- [x] 💾 文件列表缓存机制
-- [x] 📊 Token 数量预估
-- [x] ⌨️ @ 快捷引用功能
-- [x] 💭 思考过程展示
-- [x] 🔍 自动获取模型列表
-
----
-
-### ⚡️ 基于 [Plasmo](https://github.com/PlasmoHQ/plasmo) 构建
 

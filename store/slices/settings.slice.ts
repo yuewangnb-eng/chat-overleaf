@@ -15,7 +15,8 @@ const initialState: SettingsState = {
   modelTemperature: 0.36,
   maxTokens: 16384,
   codexReasoningEffort: "medium",
-  codexContextMode: "lightmemory"
+  codexContextMode: "lightmemory",
+  codexBridgeToken: ""
 }
 
 const settingsSlice = createSlice({
@@ -67,6 +68,7 @@ const settingsSlice = createSlice({
       state.maxTokens = 16384
       state.codexReasoningEffort = "medium"
       state.codexContextMode = "lightmemory"
+      state.codexBridgeToken = ""
     },
 
     // 设置当前设置分类
@@ -195,6 +197,10 @@ const settingsSlice = createSlice({
 
     setCodexContextMode: (state, action: PayloadAction<CodexContextMode>) => {
       state.codexContextMode = action.payload
+    },
+
+    setCodexBridgeToken: (state, action: PayloadAction<string>) => {
+      state.codexBridgeToken = action.payload
     }
   }
 })
@@ -221,7 +227,8 @@ export const {
   setModelTemperature,
   setMaxTokens,
   setCodexReasoningEffort,
-  setCodexContextMode
+  setCodexContextMode,
+  setCodexBridgeToken
 } = settingsSlice.actions
 
 export default settingsSlice.reducer

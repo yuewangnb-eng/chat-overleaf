@@ -21,7 +21,9 @@ export const ModelServiceSettings = () => {
     removeCustomProvider,
     removeCustomModel,
     isProviderEnabled,
-    toggleProviderEnabled
+    toggleProviderEnabled,
+    codexBridgeToken,
+    setCodexBridgeToken
   } = useSettings()
 
   const { allModels = [], handleTogglePin } = useModels()
@@ -52,6 +54,18 @@ export const ModelServiceSettings = () => {
     return `${baseUrl}/health`
   }
 
+  const getCodexBridgeUrl = (path: string) => {
+    const baseUrl = (currentProvider?.baseUrl || "http://127.0.0.1:17381").replace(/\/+$/, "")
+    const cleanPath = path.startsWith("/") ? path : `/${path}`
+    return `${baseUrl}${cleanPath}`
+  }
+
+  const generatePairingNonce = () => {
+    const bytes = new Uint8Array(24)
+    crypto.getRandomValues(bytes)
+    return Array.from(bytes, value => value.toString(16).padStart(2, "0")).join("")
+  }
+
   const checkCodexBridge = async () => {
     const response = await fetch(getCodexBridgeHealthUrl(), {
       method: "GET",
@@ -62,12 +76,57 @@ export const ModelServiceSettings = () => {
     return data?.ok === true
   }
 
+  const validateCodexBridgeToken = async () => {
+    if (!codexBridgeToken) return false
+    const response = await fetch(getCodexBridgeUrl("/v1/models"), {
+      method: "GET",
+      cache: "no-store",
+      headers: {
+        "Accept": "application/json",
+        "X-OverleafGPT-Bridge-Token": codexBridgeToken
+      }
+    })
+    return response.ok
+  }
+
+  const pairCodexBridge = async (nonce: string) => {
+    const response = await fetch(getCodexBridgeUrl("/v1/bridge/pair"), {
+      method: "POST",
+      cache: "no-store",
+      headers: {
+        "Accept": "application/json",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ nonce })
+    })
+
+    if (!response.ok) {
+      const text = await response.text().catch(() => "")
+      throw new Error(text || `Pairing failed with HTTP ${response.status}`)
+    }
+
+    const data = await response.json().catch(() => null)
+    if (!data?.token) {
+      throw new Error("Pairing response did not include a bridge token")
+    }
+    setCodexBridgeToken(data.token)
+    return data.token as string
+  }
+
   const refreshCodexBridgeStatus = async () => {
     if (!isCodexProvider) return
     setCodexBridgeStatus("checking")
     try {
-      const connected = await checkCodexBridge()
-      setCodexBridgeStatus(connected ? "connected" : "failed")
+      const bridgeRunning = await checkCodexBridge()
+      if (!bridgeRunning) {
+        setCodexBridgeStatus("failed")
+        setCodexBridgeMessage("鏈娴嬪埌鏈湴 Codex Bridge")
+        return
+      }
+
+      const tokenValid = await validateCodexBridgeToken()
+      setCodexBridgeStatus(tokenValid ? "connected" : "failed")
+      const connected = tokenValid
       setCodexBridgeMessage(connected ? "已连接到本地 Codex Bridge" : "未检测到本地 Codex Bridge")
     } catch {
       setCodexBridgeStatus("failed")
@@ -77,10 +136,12 @@ export const ModelServiceSettings = () => {
 
   const handleConnectCodexBridge = async () => {
     if (!isCodexProvider) return
+    const nonce = generatePairingNonce()
 
     setCodexBridgeStatus("checking")
     try {
       if (await checkCodexBridge()) {
+        await pairCodexBridge(nonce)
         setCodexBridgeStatus("connected")
         setCodexBridgeMessage("已连接到本地 Codex Bridge")
         return
@@ -91,12 +152,13 @@ export const ModelServiceSettings = () => {
 
     setCodexBridgeStatus("starting")
     setCodexBridgeMessage("正在请求 Windows 启动本地 Codex Bridge...")
-    window.open("overleafgpt-codex://start", "_blank")
+    window.open(`overleafgpt-codex://start?nonce=${encodeURIComponent(nonce)}`, "_blank")
 
     for (let i = 0; i < 30; i += 1) {
       await new Promise(resolve => setTimeout(resolve, 1000))
       try {
         if (await checkCodexBridge()) {
+          await pairCodexBridge(nonce)
           setCodexBridgeStatus("connected")
           setCodexBridgeMessage("已连接到本地 Codex Bridge")
           return
@@ -108,7 +170,7 @@ export const ModelServiceSettings = () => {
 
     setCodexBridgeStatus("failed")
     setCodexBridgeMessage(
-      "连接失败。请先安装 OverleafGPT Local Connector，然后重新点击连接到本地 Codex。"
+      "连接失败。请先安装 Chat Overleaf Extended Local Connector，然后重新点击连接到本地 Codex。"
     )
   }
 

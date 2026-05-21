@@ -20,6 +20,7 @@ export const useModels = () => {
     pinnedModels = [],
     apiKeys = {},
     baseUrls = {},
+    codexBridgeToken = "",
     getModelConfig,
     isModelAvailable,
     toggleModelPin,
@@ -42,6 +43,7 @@ export const useModels = () => {
         ...baseModel,
         base_url: provider.baseUrl,
         api_key: apiKeys[provider.name] || apiKeys[provider.id] || "", // 兼容新旧key格式
+        bridge_token: (baseModel.transport === 'codex_bridge' || provider.transport === 'codex_bridge') ? codexBridgeToken : undefined,
         transport: baseModel.transport || provider.transport || 'openai_chat'
       }
 
@@ -53,7 +55,7 @@ export const useModels = () => {
         providerDisplayName: provider.name
       }
     }).filter(Boolean) as ExtendedModelConfig[]
-  }, [builtinModels, allProviders, pinnedModels, apiKeys])
+  }, [builtinModels, allProviders, pinnedModels, apiKeys, codexBridgeToken])
 
   // 将自定义模型转换为扩展模型配置
   const extendedCustomModels: ExtendedModelConfig[] = useMemo(() => {
@@ -65,6 +67,7 @@ export const useModels = () => {
         model_name: customModel.modelName,
         base_url: provider.baseUrl,
         api_key: apiKeys[provider.name] || apiKeys[provider.id] || "", // 兼容新旧key格式
+        bridge_token: provider.transport === 'codex_bridge' ? codexBridgeToken : undefined,
         display_name: customModel.displayName,
         provider: provider.name,
         multimodal: false, // 默认值，可以后续扩展
@@ -83,7 +86,7 @@ export const useModels = () => {
         providerDisplayName: provider.name
       }
     }).filter(Boolean) as ExtendedModelConfig[]
-  }, [customModels, allProviders, pinnedModels, apiKeys])
+  }, [customModels, allProviders, pinnedModels, apiKeys, codexBridgeToken])
 
   // 合并所有模型
   const allModels: ExtendedModelConfig[] = useMemo(() => {

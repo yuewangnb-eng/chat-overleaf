@@ -98,6 +98,9 @@ export class ApiClient {
     const headers = new Headers()
     headers.append('Accept', stream ? 'text/event-stream' : 'application/json')
     headers.append('Content-Type', 'application/json')
+    if (this.modelConfig.bridge_token) {
+      headers.append('X-OverleafGPT-Bridge-Token', this.modelConfig.bridge_token)
+    }
 
     const convertedMessages = messages.map(msg => this.convertToOpenAIMessage(msg))
     const path = stream ? '/v1/chat/stream' : '/v1/chat'
@@ -240,7 +243,7 @@ export class ApiClient {
     const sections: string[] = []
 
     if (includeRoleInstructions && firstSystemIndex >= 0) {
-      sections.push(`Role instructions, remember for this WebChat conversation and treat this as a new OverleafGPT session:\n${this.messageContentToText(messages[firstSystemIndex].content)}`)
+      sections.push(`Role instructions, remember for this WebChat conversation and treat this as a new Chat Overleaf Extended session:\n${this.messageContentToText(messages[firstSystemIndex].content)}`)
     }
 
     const previousConversation = messages
@@ -257,7 +260,7 @@ export class ApiClient {
 
     if (previousConversation.length > 0) {
       sections.push(
-        `Previous OverleafGPT conversation history:\n${previousConversation
+        `Previous Chat Overleaf Extended conversation history:\n${previousConversation
           .map(item => `${item.message.role.toUpperCase()}:\n${item.text}`)
           .join('\n\n---\n\n')}`
       )
@@ -593,6 +596,9 @@ export class ApiClient {
       const headers = new Headers()
       if (this.modelConfig.api_key) {
         headers.append('Authorization', `Bearer ${this.modelConfig.api_key}`)
+      }
+      if (this.modelConfig.transport === 'codex_bridge' && this.modelConfig.bridge_token) {
+        headers.append('X-OverleafGPT-Bridge-Token', this.modelConfig.bridge_token)
       }
       headers.append('Accept', 'application/json')
 

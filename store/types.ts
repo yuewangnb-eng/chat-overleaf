@@ -61,4 +61,5 @@ export interface SettingsState {
   maxTokens: number
   codexReasoningEffort: CodexReasoningEffort
   codexContextMode: CodexContextMode
+  codexBridgeToken: string
 }

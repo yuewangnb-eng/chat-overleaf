@@ -1,8 +1,8 @@
 {
-  "name": "chat-overleaf",
-  "displayName": "Chat overleaf",
+  "name": "chat-overleaf-extended",
+  "displayName": "Chat Overleaf Extended",
   "version": "0.4.2",
-  "description": "使用 plasmo 构建的 chat-overleaf 浏览器插件",
+  "description": "An extended fork of chat-overleaf with Codex Bridge, WebSync, memory modes, and local bridge security",
   "author": "neil",
   "scripts": {
     "dev": "plasmo dev",

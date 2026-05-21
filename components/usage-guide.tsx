@@ -23,7 +23,7 @@ export function UsageGuide({
         <CardHeader className="pb-3">
           <CardTitle className="text-xl flex items-center gap-2">
             <Zap className="h-5 w-5 text-blue-600" />
-            Chat Overleaf 使用指南
+            Chat Overleaf Extended 使用指南
           </CardTitle>
           <CardDescription>
             AI 驱动的 Overleaf 写作助手，让学术写作更高效

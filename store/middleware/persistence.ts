@@ -12,7 +12,12 @@ const PERSISTED_FIELDS = [
   "customProviders",
   "customModels",
   "pinnedModels",
-  "settingsCategory"
+  "settingsCategory",
+  "modelTemperature",
+  "maxTokens",
+  "codexReasoningEffort",
+  "codexContextMode",
+  "codexBridgeToken"
 ]
 
 // 从localStorage加载状态
