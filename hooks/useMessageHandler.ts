@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { LLMService, type ChatMessage } from "~lib/llm-service"
 import { FileContentProcessor } from "~lib/file-content-processor"
 import { SYSTEM_PROMPT } from "~lib/system-prompt"
@@ -44,6 +44,26 @@ interface UseMessageHandlerProps {
   refreshCurrentFile?: () => Promise<ExtractedFile | null>
 }
 
+const hashText = (value: string): string => {
+  let hash = 2166136261
+  for (let i = 0; i < value.length; i += 1) {
+    hash ^= value.charCodeAt(i)
+    hash = Math.imul(hash, 16777619)
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0')
+}
+
+const buildFilesSnapshot = (files: ExtractedFile[]) =>
+  files
+    .map(file => `${file.name}:${file.length}:${hashText(file.content || '')}`)
+    .sort()
+    .join('|')
+
+const buildFilesSummary = (files: ExtractedFile[]) =>
+  files
+    .map(file => `- ${file.name} (${file.length} chars, hash ${hashText(file.content || '')})`)
+    .join('\n')
+
 export interface SelectedSnippet {
   text: string
   fileName?: string
@@ -64,13 +84,16 @@ export const useMessageHandler = ({
 }: UseMessageHandlerProps) => {
   const [isStreaming, setIsStreaming] = useState(false)
   const [abortController, setAbortController] = useState<AbortController | null>(null)
+  const codexPrimedSessionsRef = useRef<Set<string>>(new Set())
+  const codexFileSnapshotsRef = useRef<Map<string, string>>(new Map())
   
   const {
     getModelConfig,
     selectedModel,
     modelTemperature,
     maxTokens,
-    codexReasoningEffort
+    codexReasoningEffort,
+    codexContextMode
   } = useSettings()
   const { allModels } = useModels()
   const { error } = useToast()
@@ -106,15 +129,21 @@ export const useMessageHandler = ({
 
     // 使用最新的模型配置更新 LLM 服务
     llmService.updateModel(currentModelConfig)
+    const overleafSessionId = `overleaf:${projectId || 'unknown-project'}:chat:${currentChatId || 'active-chat'}`
     const codexSessionId = currentModelConfig.transport === 'codex_bridge'
-      ? `overleaf:${projectId || 'unknown-project'}:chat:${currentChatId || 'active-chat'}`
+      ? overleafSessionId
+      : undefined
+    const webSyncSessionId = currentModelConfig.transport === 'web_sync'
+      ? overleafSessionId
       : undefined
 
     llmService.updateGenerationParams({
       temperature: modelTemperature,
       maxTokens,
       codexReasoningEffort,
-      codexSessionId
+      codexContextMode,
+      codexSessionId,
+      webSyncSessionId
     })
 
     // 调试信息
@@ -182,6 +211,12 @@ export const useMessageHandler = ({
   ) => {
     // 准备聊天历史
     const chatHistory: ChatMessage[] = []
+    const overleafSessionId = `overleaf:${projectId || 'unknown-project'}:chat:${currentChatId || 'active-chat'}`
+    const isCodexBridge = currentModelConfig.transport === 'codex_bridge'
+    const useCodexLightMemoryContext = isCodexBridge && codexContextMode === 'lightmemory'
+    const codexSessionPrimed = codexPrimedSessionsRef.current.has(overleafSessionId)
+    const includeConversationHistory = !useCodexLightMemoryContext || !codexSessionPrimed
+    let pendingCodexFileSnapshot: string | null = null
 
     // 0. 发送前强制刷新当前文件（避免使用过期内容）
     let effectiveExtractedFiles = extractedFiles
@@ -220,6 +255,7 @@ export const useMessageHandler = ({
     })
 
     // 2. 添加最近的对话历史（最多10条）
+    if (includeConversationHistory) {
     const recentMessages = messages.slice(-10).filter(msg => !msg.isStreaming)
     recentMessages.forEach(msg => {
       if (msg.isUser) {
@@ -287,6 +323,7 @@ export const useMessageHandler = ({
         })
       }
     })
+    }
 
     // 生成最新文件列表提示（每次发送前实时获取实体树）
     let entityTreePromptText = ''
@@ -365,8 +402,25 @@ export const useMessageHandler = ({
     // 3.2 将最新文件内容紧挨着文件列表提示推送，强调为实时内容
     const selectedFilesData = effectiveExtractedFiles.filter(file => selectedFiles.has(file.name))
     if (selectedFilesData.length > 0) {
-      const fileMessages = await FileContentProcessor.processFilesForModel(selectedFilesData)
-      chatHistory.push(...fileMessages)
+      const fileSnapshot = buildFilesSnapshot(selectedFilesData)
+      const canReuseCodexFileContext = isCodexBridge &&
+        codexSessionPrimed &&
+        codexFileSnapshotsRef.current.get(overleafSessionId) === fileSnapshot
+
+      if (canReuseCodexFileContext) {
+        if (useCodexLightMemoryContext) {
+          chatHistory.push({
+            role: 'system',
+            content: `[绯荤粺鑷姩鎻愪緵鐨勬渶鏂版枃浠跺唴瀹规憳瑕乚\n本轮选中文件内容与上次发送给 Codex 的内容相同，未重复传全文。请继续使用当前 Codex 记忆中的文件内容。\n${buildFilesSummary(selectedFilesData)}`
+          })
+        }
+      } else {
+        const fileMessages = await FileContentProcessor.processFilesForModel(selectedFilesData)
+        chatHistory.push(...fileMessages)
+        if (isCodexBridge) {
+          pendingCodexFileSnapshot = fileSnapshot
+        }
+      }
     }
 
     chatHistory.push({
@@ -419,6 +473,13 @@ export const useMessageHandler = ({
 
       if (response.finished) {
         break
+      }
+    }
+
+    if (isCodexBridge && !hasError && !controller.signal.aborted) {
+      codexPrimedSessionsRef.current.add(overleafSessionId)
+      if (pendingCodexFileSnapshot) {
+        codexFileSnapshotsRef.current.set(overleafSessionId, pendingCodexFileSnapshot)
       }
     }
   }

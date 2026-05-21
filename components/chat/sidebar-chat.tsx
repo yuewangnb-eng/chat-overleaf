@@ -22,6 +22,8 @@ import { useToast } from "~components/ui/sonner"
 import { ChatInput, type ChatInputHandle } from "./chat-input"
 import { generateId } from "~utils/helpers"
 
+const ASSISTANT_COLLAPSE_THRESHOLD = 1800
+
 interface Message {
   id: string
   content: string
@@ -66,6 +68,7 @@ export const SidebarChat = forwardRef<SidebarChatHandle, SidebarChatProps>(({ on
   const [isResizing, setIsResizing] = useState(false)
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set())
   const [showApiTest, setShowApiTest] = useState(false)
+  const [collapsedMessageIds, setCollapsedMessageIds] = useState<Set<string>>(new Set())
 
   const sidebarRef = useRef<HTMLDivElement>(null)
 
@@ -241,6 +244,24 @@ export const SidebarChat = forwardRef<SidebarChatHandle, SidebarChatProps>(({ on
   // 删除消息
   const handleDeleteMessage = useCallback((messageId: string) => {
     setMessages(prevMessages => prevMessages.filter(msg => msg.id !== messageId))
+    setCollapsedMessageIds(prev => {
+      if (!prev.has(messageId)) return prev
+      const next = new Set(prev)
+      next.delete(messageId)
+      return next
+    })
+  }, [])
+
+  const toggleMessageCollapse = useCallback((messageId: string) => {
+    setCollapsedMessageIds(prev => {
+      const next = new Set(prev)
+      if (next.has(messageId)) {
+        next.delete(messageId)
+      } else {
+        next.add(messageId)
+      }
+      return next
+    })
   }, [])
 
   // 从消息创建分支
@@ -617,7 +638,14 @@ export const SidebarChat = forwardRef<SidebarChatHandle, SidebarChatProps>(({ on
       {/* Messages */}
       <ScrollArea className="flex-1 px-2.5 py-2">
         <div className="space-y-1">
-          {messages.map((message) => (
+          {messages.map((message) => {
+            const canCollapseAnswer = !message.isUser &&
+              !message.isStreaming &&
+              !message.isWaiting &&
+              message.content.length > ASSISTANT_COLLAPSE_THRESHOLD
+            const isAnswerCollapsed = canCollapseAnswer && collapsedMessageIds.has(message.id)
+
+            return (
             <div
               key={message.id}
               className={`flex flex-col group ${message.isUser ? "items-end" : "items-start"}`}
@@ -630,6 +658,7 @@ export const SidebarChat = forwardRef<SidebarChatHandle, SidebarChatProps>(({ on
                     : "bg-white border border-gray-100 text-gray-700 shadow-sm"
                 }`}
               >
+                <div className={`relative ${isAnswerCollapsed ? "max-h-[320px] overflow-hidden" : ""}`}>
                 <MarkdownMessage
                   content={message.content}
                   isUser={message.isUser}
@@ -689,6 +718,26 @@ export const SidebarChat = forwardRef<SidebarChatHandle, SidebarChatProps>(({ on
                   getFileContent={getFileContent}
                   applyingCommandId={applyingCommandId}
                 />
+                  {isAnswerCollapsed && (
+                    <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-b from-white/0 to-white" />
+                  )}
+                </div>
+                {canCollapseAnswer && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => toggleMessageCollapse(message.id)}
+                    className="mt-1 h-7 px-2 text-xs text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                  >
+                    {isAnswerCollapsed ? (
+                      <ChevronDown className="h-3.5 w-3.5 mr-1" />
+                    ) : (
+                      <ChevronUp className="h-3.5 w-3.5 mr-1" />
+                    )}
+                    {isAnswerCollapsed ? "展开回答" : "折叠回答"}
+                  </Button>
+                )}
                 {/* 显示上下文标签（选中文本和图片） */}
                 {message.isUser && (message.selectedText || message.images) && (
                   <div className="mt-1">
@@ -711,7 +760,8 @@ export const SidebarChat = forwardRef<SidebarChatHandle, SidebarChatProps>(({ on
                 className="mt-0.5"
               />
             </div>
-          ))}
+            )
+          })}
         </div>
       </ScrollArea>
 

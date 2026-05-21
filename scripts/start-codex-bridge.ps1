@@ -26,7 +26,7 @@ $port = if ($env:OVERLEAFGPT_CODEX_BRIDGE_PORT) {
 
 try {
   $health = Invoke-RestMethod -Uri "http://127.0.0.1:$port/health" -Method Get -TimeoutSec 2
-  if ($health.ok) {
+  if ($health.ok -and $health.service -eq "overleafgpt-codex-bridge") {
     Write-BridgeLog "Codex Bridge already listening at http://127.0.0.1:$port"
     exit 0
   }
@@ -36,13 +36,9 @@ try {
 
 $existing = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue
 if ($existing) {
-  Write-BridgeLog "Codex Bridge already listening at http://127.0.0.1:$port"
-  exit 0
-}
-
-if (Test-NetConnection -ComputerName 127.0.0.1 -Port $port -InformationLevel Quiet) {
-  Write-BridgeLog "Port $port is already reachable at 127.0.0.1"
-  exit 0
+  $processes = ($existing | Select-Object -ExpandProperty OwningProcess -Unique) -join ", "
+  Write-BridgeLog "Port $port is already used by process id(s): $processes"
+  throw "Port $port is already in use, but it is not a healthy OverleafGPT Codex Bridge. Run: Get-NetTCPConnection -LocalAddress 127.0.0.1 -LocalPort $port | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { Stop-Process -Id `$_ }"
 }
 
 Set-Location $repoRoot
@@ -79,7 +75,7 @@ for ($i = 0; $i -lt 60; $i++) {
 
 try {
   $health = Invoke-RestMethod -Uri "http://127.0.0.1:$port/health" -Method Get -TimeoutSec 5
-  if ($health.ok) {
+  if ($health.ok -and $health.service -eq "overleafgpt-codex-bridge") {
     Write-BridgeLog "Codex Bridge became healthy at http://127.0.0.1:$port"
     exit 0
   }
@@ -88,8 +84,8 @@ try {
 }
 
 if (Test-NetConnection -ComputerName 127.0.0.1 -Port $port -InformationLevel Quiet) {
-  Write-BridgeLog "Port $port is reachable at 127.0.0.1 after launch."
-  exit 0
+  Write-BridgeLog "Port $port is reachable, but /health did not confirm OverleafGPT Codex Bridge."
+  throw "Port $port is reachable, but /health did not confirm OverleafGPT Codex Bridge. See logs in $logDir."
 }
 
 throw "Codex Bridge did not become healthy after starting process $($process.Id). See logs in $logDir."

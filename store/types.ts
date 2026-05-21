@@ -43,6 +43,7 @@ export interface CustomModel {
 }
 
 export type CodexReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh'
+export type CodexContextMode = 'lightmemory' | 'fullmemory'
 
 export interface SettingsState {
   apiKeys: Record<string, string>
@@ -59,4 +60,5 @@ export interface SettingsState {
   modelTemperature: number
   maxTokens: number
   codexReasoningEffort: CodexReasoningEffort
+  codexContextMode: CodexContextMode
 }

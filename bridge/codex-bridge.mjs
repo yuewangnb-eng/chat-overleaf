@@ -355,8 +355,13 @@ function formatVisibleMessages(messages) {
     .join("\n\n---\n\n")
 }
 
-function messagesForCodexTurn(messages, reuseThread) {
+function normalizeCodexContextMode(value) {
+  return value === "fullmemory" ? "fullmemory" : "lightmemory"
+}
+
+function messagesForCodexTurn(messages, reuseThread, contextMode = "lightmemory") {
   if (!reuseThread) return messages
+  if (contextMode === "fullmemory") return messages
 
   const lastAssistantIndex = messages.reduce(
     (lastIndex, message, index) => message.role === "assistant" ? index : lastIndex,
@@ -539,10 +544,11 @@ async function runCodexTurn(body, callbacks = {}) {
     body.reasoning_effort || body.effort || body.reasoning?.effort
   )
   const sessionId = normalizeSessionId(body.session_id || body.codex_session_id)
+  const contextMode = normalizeCodexContextMode(body.codex_context_mode || body.context_mode)
   const instructions = extractSystemInstructions(messages) || "You are a helpful assistant."
 
   let { threadId, reused } = await getCodexThread({ sessionId, model, instructions })
-  let input = await buildTurnInput(messagesForCodexTurn(messages, reused))
+  let input = await buildTurnInput(messagesForCodexTurn(messages, reused, contextMode))
   let turnResult
   try {
     turnResult = await codex.send("turn/start", {

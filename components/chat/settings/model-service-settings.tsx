@@ -150,8 +150,7 @@ export const ModelServiceSettings = () => {
   const resetWebSyncRole = async () => {
     if (!currentProvider) return
     const result = await sendWebSyncMessage({
-      type: "overleafgpt_web_sync_reset_role",
-      primedKey: `${webSyncTarget}:${currentProvider.name}`
+      type: "overleafgpt_web_sync_reset_role"
     })
 
     if (result?.ok) {

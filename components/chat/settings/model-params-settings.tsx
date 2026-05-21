@@ -4,7 +4,7 @@ import { Input } from "~components/ui/input"
 import { Label } from "~components/ui/label"
 import { useSettings } from "~hooks/useSettings"
 import { cn } from "~lib/utils"
-import type { CodexReasoningEffort } from "~store/types"
+import type { CodexContextMode, CodexReasoningEffort } from "~store/types"
 
 const temperaturePresets = [
   { label: "精准", value: 0.2, hint: "更保守，适合代码/公式" },
@@ -23,14 +23,25 @@ const codexReasoningPresets: Array<{
   { label: "xhigh", value: "xhigh", hint: "Deepest" }
 ]
 
+const codexContextModes: Array<{
+  label: string
+  value: CodexContextMode
+  hint: string
+}> = [
+  { label: "Light Memory", value: "lightmemory", hint: "Reuse Codex memory and reduce repeated history" },
+  { label: "Full Memory", value: "fullmemory", hint: "Reuse Codex memory while also sending chat history" }
+]
+
 export const ModelParamsSettings = () => {
   const {
     modelTemperature,
     maxTokens,
     codexReasoningEffort,
+    codexContextMode,
     setModelTemperature,
     setMaxTokens,
-    setCodexReasoningEffort
+    setCodexReasoningEffort,
+    setCodexContextMode
   } = useSettings()
 
   const [localTemp, setLocalTemp] = useState(modelTemperature ?? 0.36)
@@ -65,6 +76,35 @@ export const ModelParamsSettings = () => {
           <p className="text-sm text-gray-500 mt-1">
             自定义模型生成的温度与最大回复长度，实时生效。
           </p>
+        </div>
+
+        <div className="border border-gray-200 rounded-lg p-4 shadow-sm bg-white">
+          <div className="mb-3">
+            <Label className="text-sm font-medium text-gray-800">Codex context mode</Label>
+            <p className="text-xs text-gray-500 mt-1">
+              Controls how much context is resent after a Codex session has memory.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {codexContextModes.map((mode) => (
+              <Button
+                key={mode.value}
+                variant="outline"
+                size="sm"
+                onClick={() => setCodexContextMode(mode.value)}
+                className={cn(
+                  "h-auto justify-start py-2 text-left",
+                  codexContextMode === mode.value && "border-blue-500 text-blue-600 bg-blue-50"
+                )}
+              >
+                <div className="flex flex-col items-start leading-tight">
+                  <span className="text-xs font-semibold">{mode.label}</span>
+                  <span className="text-[11px] text-gray-500">{mode.hint}</span>
+                </div>
+              </Button>
+            ))}
+          </div>
         </div>
 
         {/* Codex reasoning effort */}

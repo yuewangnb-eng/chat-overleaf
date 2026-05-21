@@ -1,0 +1,146 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1750" viewBox="0 0 1600 1750">
+  <defs>
+    <style>
+      .bg { fill: #f7f8fb; }
+      .title { font: 700 34px "Microsoft YaHei", "Segoe UI", Arial, sans-serif; fill: #172033; }
+      .subtitle { font: 400 18px "Microsoft YaHei", "Segoe UI", Arial, sans-serif; fill: #5d6678; }
+      .section { font: 700 22px "Microsoft YaHei", "Segoe UI", Arial, sans-serif; fill: #172033; }
+      .label { font: 700 17px "Microsoft YaHei", "Segoe UI", Arial, sans-serif; fill: #172033; }
+      .text { font: 400 15px "Microsoft YaHei", "Segoe UI", Arial, sans-serif; fill: #283246; }
+      .small { font: 400 13px "Microsoft YaHei", "Segoe UI", Arial, sans-serif; fill: #5d6678; }
+      .mono { font: 400 13px Consolas, "Microsoft YaHei", monospace; fill: #283246; }
+      .box { fill: #ffffff; stroke: #d9deea; stroke-width: 2; rx: 10; }
+      .core { fill: #eef5ff; stroke: #98bdf6; stroke-width: 2; rx: 10; }
+      .api { fill: #f3efff; stroke: #b5a1f5; stroke-width: 2; rx: 10; }
+      .codex { fill: #eff8f1; stroke: #8ccd9c; stroke-width: 2; rx: 10; }
+      .web { fill: #fff6e8; stroke: #efbd74; stroke-width: 2; rx: 10; }
+      .warn { fill: #fff0f0; stroke: #ee9c9c; stroke-width: 2; rx: 10; }
+      .tag { fill: #ffffff; stroke: #cfd6e4; stroke-width: 1.5; rx: 16; }
+      .prompt { fill: #fbfcff; stroke: #d9deea; stroke-width: 1.4; rx: 8; }
+      .line { stroke: #697386; stroke-width: 2.2; fill: none; marker-end: url(#arrow); }
+      .lineApi { stroke: #7456d8; stroke-width: 2.4; fill: none; marker-end: url(#arrowApi); }
+      .lineCodex { stroke: #348a4d; stroke-width: 2.4; fill: none; marker-end: url(#arrowCodex); }
+      .lineWeb { stroke: #c07b19; stroke-width: 2.4; fill: none; marker-end: url(#arrowWeb); }
+    </style>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#697386"/>
+    </marker>
+    <marker id="arrowApi" markerWidth="12" markerHeight="12" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#7456d8"/>
+    </marker>
+    <marker id="arrowCodex" markerWidth="12" markerHeight="12" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#348a4d"/>
+    </marker>
+    <marker id="arrowWeb" markerWidth="12" markerHeight="12" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#c07b19"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1600" height="1750"/>
+
+  <text class="title" x="70" y="70">OverleafGPT 提示词传入内容流程图</text>
+  <text class="subtitle" x="70" y="105">按实际传入内容标题说明：系统角色规则、历史对话信息、当前 Overleaf 上下文、当前用户请求。</text>
+
+  <rect class="core" x="70" y="145" width="1460" height="250"/>
+  <text class="section" x="100" y="185">0. 前端统一采集信息</text>
+  <text class="text" x="110" y="225">用户输入：当前问题、当前选中文本、选中文件路径、上传图片</text>
+  <text class="text" x="110" y="260">项目上下文：实时项目文件列表、已选择文件内容、当前文件刷新结果</text>
+  <text class="text" x="110" y="295">聊天上下文：当前 OverleafGPT 聊天里的 user / assistant 历史</text>
+  <text class="text" x="110" y="330">统一基础结构：先生成 chatHistory，再按 provider 类型决定最终实际传入内容</text>
+
+  <rect class="prompt" x="870" y="205" width="600" height="145"/>
+  <text class="label" x="900" y="238">基础 chatHistory 可能包含</text>
+  <text class="mono" x="900" y="268">[系统角色规则]</text>
+  <text class="mono" x="900" y="293">[历史对话信息]</text>
+  <text class="mono" x="900" y="318">[系统自动提供的真实项目文件列表 / 最新文件内容]</text>
+  <text class="mono" x="900" y="343">[当前消息的用户选中内容 / 当前消息的用户问题]</text>
+
+  <rect class="box" x="555" y="445" width="490" height="100"/>
+  <text class="label" x="595" y="485">1. 根据当前模型 provider 分流</text>
+  <text class="small" x="595" y="515">普通 API / Codex Bridge / ChatGPT Web / DeepSeek Web</text>
+  <path class="line" d="M800 395 L800 445"/>
+
+  <rect class="api" x="70" y="645" width="450" height="470"/>
+  <text class="section" x="100" y="685">A. 普通 API：每轮完整上下文</text>
+  <text class="small" x="100" y="715">适用：OpenAI compatible API、DeepSeek API、Gemini API 等</text>
+  <line x1="100" y1="740" x2="490" y2="740" stroke="#d5c9ff" stroke-width="2"/>
+  <text class="label" x="100" y="775">实际传入内容标题</text>
+  <text class="mono" x="120" y="810">System: 系统角色规则</text>
+  <text class="mono" x="120" y="840">USER / ASSISTANT: 历史对话信息</text>
+  <text class="mono" x="120" y="870">USER: 系统自动提供的真实项目文件列表</text>
+  <text class="mono" x="120" y="900">SYSTEM: 系统自动提供的最新文件内容</text>
+  <text class="mono" x="120" y="930">USER: 当前消息的用户选中内容 / 当前消息的用户问题</text>
+  <text class="small" x="100" y="980">普通 API 不依赖外部会话记忆，所以每轮都尽量给足上下文。</text>
+
+  <rect class="codex" x="575" y="645" width="450" height="650"/>
+  <text class="section" x="605" y="685">B. Codex Bridge：同聊天复用 Codex thread</text>
+  <text class="small" x="605" y="715">session key: overleaf:&lt;projectId&gt;:chat:&lt;currentChatId&gt;</text>
+  <text class="small" x="605" y="740">模型名不参与 key，因此 gpt-5.4 与 gpt-5.5 共享记忆。</text>
+  <line x1="605" y1="765" x2="995" y2="765" stroke="#b6dfbe" stroke-width="2"/>
+
+  <text class="label" x="605" y="800">B1. 第一次 Codex 对话</text>
+  <text class="mono" x="625" y="832">developerInstructions: 系统角色规则</text>
+  <text class="mono" x="625" y="862">USER / ASSISTANT: 历史对话信息</text>
+  <text class="mono" x="625" y="892">USER: 系统自动提供的真实项目文件列表</text>
+  <text class="mono" x="625" y="922">SYSTEM CONTEXT: 系统自动提供的最新文件内容</text>
+  <text class="mono" x="625" y="952">USER: 当前消息的用户选中内容 / 当前消息的用户问题</text>
+
+  <text class="label" x="605" y="1005">B2. 后续 Codex 对话</text>
+  <text class="small" x="625" y="1035">共同规则：复用 Codex thread；不再传 developerInstructions；文件内容按变化增量发送。</text>
+
+  <text class="label" x="625" y="1080">B2.1 Light Memory</text>
+  <text class="mono" x="645" y="1110">不传历史对话信息</text>
+  <text class="mono" x="645" y="1140">USER: 系统自动提供的真实项目文件列表</text>
+  <text class="mono" x="645" y="1170">SYSTEM CONTEXT: 文件未变化时传摘要 + hash，变化时传全文</text>
+  <text class="mono" x="645" y="1200">USER: 当前消息的用户选中内容 / 当前消息的用户问题</text>
+
+  <text class="label" x="625" y="1245">B2.2 Full Memory</text>
+  <text class="mono" x="645" y="1275">继续传 USER / ASSISTANT: 历史对话信息</text>
+
+  <rect class="web" x="1080" y="645" width="450" height="650"/>
+  <text class="section" x="1110" y="685">C. WebSync：ChatGPT Web / DeepSeek Web</text>
+  <text class="small" x="1110" y="715">每个 Web provider 有自己的 primed key，不和 Codex 共享。</text>
+  <text class="small" x="1110" y="740">ChatGPT Web 与 DeepSeek Web 彼此独立。</text>
+  <line x1="1110" y1="765" x2="1500" y2="765" stroke="#f0ca91" stroke-width="2"/>
+
+  <text class="label" x="1110" y="800">C1. 首次进入某个 Web provider</text>
+  <text class="mono" x="1130" y="832">Role instructions: 系统角色规则</text>
+  <text class="mono" x="1130" y="862">Previous OverleafGPT conversation history: 历史对话信息</text>
+  <text class="mono" x="1130" y="892">Current Overleaf context: 当前 Overleaf 上下文</text>
+  <text class="mono" x="1130" y="922">Current user request: 当前用户请求</text>
+
+  <text class="label" x="1110" y="1005">C2. 后续回到同一 Web provider</text>
+  <text class="small" x="1130" y="1035">不重复发送系统角色规则，依赖网页对话自己的上下文。</text>
+  <text class="mono" x="1130" y="1080">Current Overleaf context: 当前 Overleaf 上下文</text>
+  <text class="mono" x="1130" y="1110">Current user request: 当前用户请求</text>
+
+  <path class="lineApi" d="M675 545 C430 590 300 590 295 645"/>
+  <path class="lineCodex" d="M800 545 L800 645"/>
+  <path class="lineWeb" d="M925 545 C1170 590 1300 590 1305 645"/>
+
+  <rect class="box" x="70" y="1360" width="1460" height="250"/>
+  <text class="section" x="100" y="1400">D. 模型/provider 切换时的提示词传入规则</text>
+
+  <rect class="tag" x="105" y="1435" width="430" height="70"/>
+  <text class="label" x="130" y="1465">Codex 5.4 → Codex 5.5</text>
+  <text class="small" x="130" y="1492">同一个 Codex thread，按当前 Memory 模式传入。</text>
+
+  <rect class="tag" x="585" y="1435" width="430" height="70"/>
+  <text class="label" x="610" y="1465">Codex → ChatGPT Web</text>
+  <text class="small" x="610" y="1492">若首次使用 ChatGPT Web，传系统角色规则 + 历史对话信息。</text>
+
+  <rect class="tag" x="1065" y="1435" width="430" height="70"/>
+  <text class="label" x="1090" y="1465">ChatGPT Web → Codex</text>
+  <text class="small" x="1090" y="1492">回到原 Codex thread，不把 Web 对话历史重新塞给 Codex。</text>
+
+  <rect class="tag" x="105" y="1525" width="430" height="60"/>
+  <text class="label" x="130" y="1553">ChatGPT Web → DeepSeek Web</text>
+  <text class="small" x="130" y="1578">两个 Web provider 独立，DeepSeek 首次会重新传规则和历史。</text>
+
+  <rect class="tag" x="585" y="1525" width="430" height="60"/>
+  <text class="label" x="610" y="1553">重发规则按钮</text>
+  <text class="small" x="610" y="1578">清空 WebSync primed 标记，下次 Web 请求重发系统角色规则。</text>
+
+  <rect class="warn" x="70" y="1650" width="1460" height="55"/>
+  <text class="text" x="100" y="1685">总结：普通 API 每轮完整；Codex 角色规则只初始化 thread，文件按变化增量发送，Full Memory 额外保留历史对话传入。</text>
+</svg>

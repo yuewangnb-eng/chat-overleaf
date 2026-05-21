@@ -1,6 +1,6 @@
 import type { ModelConfig } from './builtin-models'
 import { ApiClient } from './api-client'
-import type { CodexReasoningEffort } from '~store/types'
+import type { CodexContextMode, CodexReasoningEffort } from '~store/types'
 
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'system'
@@ -30,7 +30,9 @@ export class LLMService {
     temperature: number
     maxTokens: number
     codexReasoningEffort: CodexReasoningEffort
+    codexContextMode: CodexContextMode
     codexSessionId?: string
+    webSyncSessionId?: string
   }
 
   constructor(model: ModelConfig) {
@@ -39,7 +41,8 @@ export class LLMService {
     this.generationParams = {
       temperature: 0.36,
       maxTokens: 16384,
-      codexReasoningEffort: 'medium'
+      codexReasoningEffort: 'medium',
+      codexContextMode: 'lightmemory'
     }
   }
 
@@ -54,7 +57,9 @@ export class LLMService {
     temperature?: number
     maxTokens?: number
     codexReasoningEffort?: CodexReasoningEffort
+    codexContextMode?: CodexContextMode
     codexSessionId?: string
+    webSyncSessionId?: string
   }) {
     if (params.temperature !== undefined) {
       this.generationParams.temperature = params.temperature
@@ -65,8 +70,14 @@ export class LLMService {
     if (params.codexReasoningEffort !== undefined) {
       this.generationParams.codexReasoningEffort = params.codexReasoningEffort
     }
-    if (params.codexSessionId !== undefined) {
+    if (params.codexContextMode !== undefined) {
+      this.generationParams.codexContextMode = params.codexContextMode
+    }
+    if (Object.prototype.hasOwnProperty.call(params, 'codexSessionId')) {
       this.generationParams.codexSessionId = params.codexSessionId
+    }
+    if (Object.prototype.hasOwnProperty.call(params, 'webSyncSessionId')) {
+      this.generationParams.webSyncSessionId = params.webSyncSessionId
     }
   }
 
@@ -85,7 +96,9 @@ export class LLMService {
           temperature: this.generationParams.temperature,
           maxTokens: this.generationParams.maxTokens,
           codexReasoningEffort: this.generationParams.codexReasoningEffort,
-          codexSessionId: this.generationParams.codexSessionId
+          codexContextMode: this.generationParams.codexContextMode,
+          codexSessionId: this.generationParams.codexSessionId,
+          webSyncSessionId: this.generationParams.webSyncSessionId
         }
       )
 
@@ -132,7 +145,9 @@ export class LLMService {
           temperature: this.generationParams.temperature,
           maxTokens: this.generationParams.maxTokens,
           codexReasoningEffort: this.generationParams.codexReasoningEffort,
-          codexSessionId: this.generationParams.codexSessionId
+          codexContextMode: this.generationParams.codexContextMode,
+          codexSessionId: this.generationParams.codexSessionId,
+          webSyncSessionId: this.generationParams.webSyncSessionId
         }
       )
 

@@ -24,9 +24,10 @@ import {
   setProviderEnabled,
   setModelTemperature,
   setMaxTokens,
-  setCodexReasoningEffort
+  setCodexReasoningEffort,
+  setCodexContextMode
 } from "~store/slices/settings.slice"
-import type { CodexReasoningEffort } from "~store/types"
+import type { CodexContextMode, CodexReasoningEffort } from "~store/types"
 
 export const useSettings = () => {
   const dispatch = useDispatch<AppDispatch>()
@@ -45,7 +46,8 @@ export const useSettings = () => {
     enabledProviders = {},
     modelTemperature = 0.36,
     maxTokens = 16384,
-    codexReasoningEffort = "medium"
+    codexReasoningEffort = "medium",
+    codexContextMode = "lightmemory"
   } = settingsState || {}
 
   // 初始化设置 - 使用新的供应商配置系统
@@ -122,6 +124,7 @@ export const useSettings = () => {
     modelTemperature,
     maxTokens,
     codexReasoningEffort,
+    codexContextMode,
 
     // 方法
     setApiKey: (provider: string, apiKey: string) =>
@@ -159,6 +162,8 @@ export const useSettings = () => {
       dispatch(setMaxTokens(value)),
     setCodexReasoningEffort: (value: CodexReasoningEffort) =>
       dispatch(setCodexReasoningEffort(value)),
+    setCodexContextMode: (value: CodexContextMode) =>
+      dispatch(setCodexContextMode(value)),
     isProviderEnabled,
     initializeSettings,
     getModelConfig,

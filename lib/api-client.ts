@@ -1,13 +1,15 @@
 import type { ModelConfig } from './builtin-models'
 import type { ChatMessage } from './llm-service'
-import type { CodexReasoningEffort } from '~store/types'
+import type { CodexContextMode, CodexReasoningEffort } from '~store/types'
 
 interface ChatOptions {
   temperature?: number
   max_tokens?: number
   maxTokens?: number
   codexReasoningEffort?: CodexReasoningEffort
+  codexContextMode?: CodexContextMode
   codexSessionId?: string
+  webSyncSessionId?: string
 }
 
 /**
@@ -72,7 +74,7 @@ export class ApiClient {
     options?: ChatOptions
   ): Promise<Response> {
     if (this.modelConfig.transport === 'web_sync') {
-      return this.sendWebSyncRequest(messages, stream, abortSignal)
+      return this.sendWebSyncRequest(messages, stream, abortSignal, options)
     }
 
     if (this.modelConfig.transport === 'codex_bridge') {
@@ -107,6 +109,7 @@ export class ApiClient {
       stream,
       temperature: options?.temperature ?? 0.36,
       reasoning_effort: options?.codexReasoningEffort ?? 'medium',
+      codex_context_mode: options?.codexContextMode ?? 'lightmemory',
       session_id: options?.codexSessionId,
       max_tokens: options?.max_tokens ?? options?.maxTokens ?? 16384
     })
@@ -122,7 +125,8 @@ export class ApiClient {
   private async sendWebSyncRequest(
     messages: ChatMessage[],
     stream: boolean,
-    abortSignal?: AbortSignal
+    abortSignal?: AbortSignal,
+    options?: ChatOptions
   ): Promise<Response> {
     if (typeof chrome === 'undefined' || !chrome.runtime?.connect) {
       return new Response('WebSync is only available inside the browser extension.', { status: 503 })
@@ -131,7 +135,7 @@ export class ApiClient {
     const encoder = new TextEncoder()
     const requestId = `web-sync-${Date.now()}-${Math.random().toString(36).slice(2)}`
     const target = this.getWebSyncTarget()
-    const promptPayload = await this.buildWebSyncPrompt(messages, target)
+    const promptPayload = await this.buildWebSyncPrompt(messages, target, options?.webSyncSessionId)
 
     let port: chrome.runtime.Port | null = null
     let closed = false
@@ -222,12 +226,13 @@ export class ApiClient {
     return marker.includes('deepseek') ? 'deepseek' : 'chatgpt'
   }
 
-  private async buildWebSyncPrompt(messages: ChatMessage[], target: 'chatgpt' | 'deepseek'): Promise<{
+  private async buildWebSyncPrompt(messages: ChatMessage[], target: 'chatgpt' | 'deepseek', sessionId?: string): Promise<{
     prompt: string
     primedKey: string
     markPrimed: boolean
   }> {
-    const primedKey = `${target}:${this.modelConfig.provider}`
+    const sessionScope = this.normalizeWebSyncSessionScope(sessionId)
+    const primedKey = `${target}:${this.modelConfig.provider}:${sessionScope}:role-v2`
     const includeRoleInstructions = !(await this.isWebSyncPrimed(primedKey))
 
     const firstSystemIndex = messages.findIndex(message => message.role === 'system')
@@ -235,7 +240,27 @@ export class ApiClient {
     const sections: string[] = []
 
     if (includeRoleInstructions && firstSystemIndex >= 0) {
-      sections.push(`Role instructions, remember for this WebChat conversation:\n${this.messageContentToText(messages[firstSystemIndex].content)}`)
+      sections.push(`Role instructions, remember for this WebChat conversation and treat this as a new OverleafGPT session:\n${this.messageContentToText(messages[firstSystemIndex].content)}`)
+    }
+
+    const previousConversation = messages
+      .map((message, index) => ({ message, index, text: this.messageContentToText(message.content).trim() }))
+      .filter(item => item.text)
+      .filter(item => {
+        if (!includeRoleInstructions) return false
+        if (item.index === firstSystemIndex) return false
+        if (item.index === lastUserIndex) return false
+        if (item.message.role === 'assistant') return true
+        if (item.message.role === 'user') return !this.isWebSyncAutoContext(item.text)
+        return false
+      })
+
+    if (previousConversation.length > 0) {
+      sections.push(
+        `Previous OverleafGPT conversation history:\n${previousConversation
+          .map(item => `${item.message.role.toUpperCase()}:\n${item.text}`)
+          .join('\n\n---\n\n')}`
+      )
     }
 
     const contextSections = messages
@@ -266,6 +291,13 @@ export class ApiClient {
       primedKey,
       markPrimed: includeRoleInstructions
     }
+  }
+
+  private normalizeWebSyncSessionScope(sessionId?: string): string {
+    const value = typeof sessionId === 'string' && sessionId.trim()
+      ? sessionId.trim()
+      : 'global'
+    return value.replace(/[^a-zA-Z0-9._:-]+/g, '_').slice(0, 240)
   }
 
   private async isWebSyncPrimed(primedKey: string): Promise<boolean> {
