@@ -41,17 +41,29 @@ https://github.com/anuin-cat/chat-overleaf
    - **新增 Web providers 首次和后续提问的记忆功能**，支持同一对话切换 provider 时的上下文补发逻辑
 - 新增长回答折叠 / 展开 UI
 
+### v0.4.2-release.2 主要修复
+
+本次试用版重点修复了 ChatGPT Web / DeepSeek Web 的 WebSync 回答同步和渲染问题：
+
+- 修复 ChatGPT Web 在后台标签页生成回答时，插件无法稳定抓取网页回复的问题。
+- 优化 WebSync 流式回传逻辑，支持边生成边同步到 Overleaf 插件，并在回答完成后正确结束接收状态。
+- 修复 ChatGPT Web 返回的 compact stream / SSE 数据解析问题，减少回答内容丢失、过早结束或卡在接收状态的情况。
+- 修复 `<<<REPLACE>>>`、`<<<SEARCH>>>`、`<<<WITH>>>`、`<<<END>>>` 等替换块标记被 Markdown / HTML 渲染吞掉的问题。
+- 修复替换块标记为 HTML entity 形式时无法被插件识别和渲染为操作卡片的问题。
+- 修复 Markdown、LaTeX 块公式和行内公式 `\(...\)` 的显示问题。
+- 优化用户主动停止回答时的状态恢复和调试日志，方便区分“用户停止”和“桥接异常”。
+
 ## 本版本使用方法
 
 ### 1. 下载发布包
 
 打开下面的下载链接：
 
-https://github.com/yuewangnb-eng/chat-overleaf/releases/download/v0.4.2-release.1/ChatOverleafExtended-Release.zip
+https://github.com/yuewangnb-eng/chat-overleaf/releases/download/v0.4.2-release.2/ChatOverleafExtended-Release.zip
 
 如果上面的链接无法直接下载，也可以打开 Release 页面手动下载：
 
-https://github.com/yuewangnb-eng/chat-overleaf/releases/tag/v0.4.2-release.1
+https://github.com/yuewangnb-eng/chat-overleaf/releases/tag/v0.4.2-release.2
 
 在页面的 `Assets` 区域下载：
 
