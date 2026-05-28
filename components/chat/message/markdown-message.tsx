@@ -45,6 +45,10 @@ const markedInstance = new Marked({
 const normalizeMathDelimiters = (text: string): string => {
   if (!text) return text
 
+  const normalizeInlineMath = (line: string): string => {
+    return line.replace(/\\\((.+?)\\\)/g, (_match, formula) => `$${formula}$`)
+  }
+
   const lines = text.split(/\r?\n/)
   const normalizedLines: string[] = []
 
@@ -139,10 +143,18 @@ const normalizeMathDelimiters = (text: string): string => {
       continue
     }
 
-    normalizedLines.push(line)
+    normalizedLines.push(normalizeInlineMath(line))
   }
 
   return normalizedLines.join('\n')
+}
+
+const escapeCommandTagsForMarkdown = (text: string): string => {
+  return text
+    .replace(/<</g, '&lt;&lt;')
+    .replace(/&lt;&lt;</g, '&lt;&lt;&lt;')
+    .replace(/>>/g, '&gt;&gt;')
+    .replace(/>&gt;&gt;/g, '&gt;&gt;&gt;')
 }
 
 export const MarkdownMessage = ({ 
@@ -321,7 +333,7 @@ export const MarkdownMessage = ({
 
   const renderMarkdown = (text: string) => {
     try {
-      const normalizedText = normalizeMathDelimiters(text)
+      const normalizedText = escapeCommandTagsForMarkdown(normalizeMathDelimiters(text))
       const html = markedInstance.parse(normalizedText)
       return { __html: html }
     } catch (error) {

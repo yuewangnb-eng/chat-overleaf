@@ -141,13 +141,22 @@ export class ApiClient {
     const promptPayload = await this.buildWebSyncPrompt(messages, target, options?.webSyncSessionId)
 
     let port: chrome.runtime.Port | null = null
+    let keepAliveTimer: ReturnType<typeof setInterval> | undefined
     let closed = false
 
     const responseStream = new ReadableStream<Uint8Array>({
       start: (controller) => {
+        const stopKeepAlive = () => {
+          if (keepAliveTimer !== undefined) {
+            clearInterval(keepAliveTimer)
+            keepAliveTimer = undefined
+          }
+        }
+
         const close = () => {
           if (closed) return
           closed = true
+          stopKeepAlive()
           try {
             controller.close()
           } catch {
@@ -159,35 +168,70 @@ export class ApiClient {
           controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`))
         }
 
+        const writeComment = (comment: string) => {
+          controller.enqueue(encoder.encode(`: ${comment}\n\n`))
+        }
+
         const writeDone = () => {
           controller.enqueue(encoder.encode('data: [DONE]\n\n'))
           close()
         }
 
         port = chrome.runtime.connect({ name: 'overleafgpt-web-sync' })
+        this.logWebSyncDebug(requestId, 'frontend_port_connected', { target })
+        keepAliveTimer = setInterval(() => {
+          try {
+            port?.postMessage({
+              type: 'web_sync_ping',
+              requestId
+            })
+          } catch {
+            stopKeepAlive()
+          }
+        }, 10000)
+
         port.onMessage.addListener((message) => {
           if (!message || message.requestId !== requestId) return
 
           if (message.type === 'web_sync_delta') {
+            this.logWebSyncDebug(requestId, 'frontend_delta', {
+              deltaLength: typeof message.delta === 'string' ? message.delta.length : 0,
+              replace: message.replace === true
+            })
             writeSse({
               id: requestId,
               object: 'chat.completion.chunk',
               choices: [{
                 index: 0,
-                delta: { content: message.delta || '' },
+                delta: {
+                  content: message.delta || '',
+                  replace_content: message.replace === true
+                },
                 finish_reason: null
               }]
             })
           } else if (message.type === 'web_sync_done') {
+            this.logWebSyncDebug(requestId, 'frontend_done')
             writeDone()
           } else if (message.type === 'web_sync_error') {
+            this.logWebSyncDebug(requestId, 'frontend_error', {
+              error: message.error || 'WebSync request failed'
+            })
             closed = true
             controller.error(new Error(message.error || 'WebSync request failed'))
+          } else if (message.type === 'web_sync_progress') {
+            writeComment(`web_sync_progress ${message.phase || 'waiting'}`)
+          } else if (message.type === 'web_sync_pong') {
+            writeComment('web_sync_pong')
           }
         })
 
         port.onDisconnect.addListener(() => {
+          stopKeepAlive()
           if (!closed) {
+            this.logWebSyncDebug(requestId, 'frontend_port_disconnected', {
+              error: chrome.runtime.lastError?.message || 'WebSync bridge disconnected'
+            })
             controller.error(new Error(chrome.runtime.lastError?.message || 'WebSync bridge disconnected'))
           }
         })
@@ -208,8 +252,16 @@ export class ApiClient {
           stream,
           model: this.modelConfig.model_name
         })
+        this.logWebSyncDebug(requestId, 'frontend_start_sent', {
+          target,
+          promptLength: promptPayload.prompt.length
+        })
       },
       cancel: () => {
+        if (keepAliveTimer !== undefined) {
+          clearInterval(keepAliveTimer)
+          keepAliveTimer = undefined
+        }
         port?.postMessage({ type: 'web_sync_abort', requestId })
         port?.disconnect()
       }
@@ -227,6 +279,28 @@ export class ApiClient {
   private getWebSyncTarget(): 'chatgpt' | 'deepseek' {
     const marker = `${this.modelConfig.provider} ${this.modelConfig.model_name} ${this.modelConfig.base_url}`.toLowerCase()
     return marker.includes('deepseek') ? 'deepseek' : 'chatgpt'
+  }
+
+  private async logWebSyncDebug(requestId: string, event: string, data: Record<string, unknown> = {}) {
+    try {
+      if (typeof chrome === 'undefined' || !chrome.storage?.local) return
+
+      const key = 'overleafgpt_web_sync_debug_log'
+      const entry = {
+        ts: new Date().toISOString(),
+        source: 'frontend',
+        requestId,
+        event,
+        ...data
+      }
+      const stored = await chrome.storage.local.get(key)
+      const current = Array.isArray(stored[key]) ? stored[key] : []
+      await chrome.storage.local.set({
+        [key]: [...current.slice(-199), entry]
+      })
+    } catch {
+      // Debug logging must never break WebSync.
+    }
   }
 
   private async buildWebSyncPrompt(messages: ChatMessage[], target: 'chatgpt' | 'deepseek', sessionId?: string): Promise<{
@@ -465,6 +539,13 @@ export class ApiClient {
     // 用于处理跨 chunk 的不完整数据
     let buffer = ''
 
+    const normalizeStreamContent = (value: string): string => {
+      return value.replace(/<<<([A-Za-z_]+)>>>/g, (_match, tag) => {
+        const normalizedTag = String(tag).toUpperCase()
+        return `<<<${normalizedTag}>>>`
+      })
+    }
+
     try {
       while (true) {
         const { done, value } = await reader.read()
@@ -493,6 +574,9 @@ export class ApiClient {
           }
 
           if (data === '[DONE]') {
+            await this.logWebSyncDebug('web-sync-parser', 'parser_done', {
+              contentLength: fullContent.length
+            })
             yield { 
               content: fullContent, 
               finished: true, 
@@ -524,12 +608,24 @@ export class ApiClient {
                 if (fullThinking && !thinkingFinished) {
                   thinkingFinished = true
                 }
-                fullContent += contentDelta
+                if (delta.replace_content === true || delta.replaceContent === true) {
+                  fullContent = normalizeStreamContent(contentDelta)
+                } else {
+                  fullContent = normalizeStreamContent(fullContent + contentDelta)
+                }
                 hasUpdate = true
               }
               
               // 只有当有更新时才 yield
               if (hasUpdate) {
+                if (String(parsed.id || '').startsWith('web-sync-')) {
+                  await this.logWebSyncDebug(parsed.id, 'parser_yield', {
+                    contentLength: fullContent.length,
+                    contentDeltaLength: typeof contentDelta === 'string' ? contentDelta.length : 0,
+                    replace: delta.replace_content === true || delta.replaceContent === true,
+                    finished: false
+                  })
+                }
                 yield { 
                   content: fullContent, 
                   finished: false, 
@@ -559,7 +655,11 @@ export class ApiClient {
             const parsed = JSON.parse(data)
             const delta = parsed.choices?.[0]?.delta
             if (delta?.content) {
-              fullContent += delta.content
+              if (delta.replace_content === true || delta.replaceContent === true) {
+                fullContent = normalizeStreamContent(delta.content)
+              } else {
+                fullContent = normalizeStreamContent(fullContent + delta.content)
+              }
             }
             if (delta?.reasoning_content ?? delta?.reasoning) {
               fullThinking += delta.reasoning_content ?? delta.reasoning

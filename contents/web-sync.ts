@@ -25,6 +25,78 @@ export const config: PlasmoCSConfig = {
 }
 
 const activeRequests = new Map<string, AbortController>()
+const WEB_SYNC_DEBUG_STORAGE_KEY = "overleafgpt_web_sync_debug_log"
+
+const activeStreamState = new Map<string, {
+  requestId: string
+  lastSentText: string
+  lastSseText: string
+  sseDone: boolean
+  doneSent: boolean
+  activeStreamCount: number
+  finalTimer?: ReturnType<typeof setTimeout>
+  pendingFinalText: string
+}>()
+
+const NETWORK_FINAL_SETTLE_MS = 2500
+
+window.addEventListener("message", (event) => {
+  void handlePageBridgeMessage(event)
+})
+
+async function handlePageBridgeMessage(event: MessageEvent) {
+  if (event.source !== window) return
+  const data = event.data
+  if (!data || typeof data.type !== "string") return
+
+  const current = getCurrentStreamState()
+  if (!current) return
+
+  if (data.type === "OVERLEAFGPT_WEB_SYNC_STREAM_START") {
+    current.sseDone = false
+    void logWebSyncDebug(current.requestId, "network_stream_start")
+    return
+  }
+
+  if (data.type === "OVERLEAFGPT_WEB_SYNC_STREAM_STATE") {
+    current.activeStreamCount = Math.max(0, Number(data.activeStreamCount) || 0)
+    return
+  }
+
+  if (data.type === "OVERLEAFGPT_WEB_SYNC_SSE_DEBUG") {
+    void logWebSyncDebug(current.requestId, "network_sse_debug", {
+      summary: data.summary || null
+    })
+    return
+  }
+
+  if (data.type !== "OVERLEAFGPT_WEB_SYNC_SSE") return
+
+  const text = typeof data.text === "string" ? data.text : ""
+  if (text && text !== current.lastSseText) {
+    clearPendingNetworkFinal(current)
+    current.lastSseText = text
+    sendStreamingText(current, text, false)
+    void logWebSyncDebug(current.requestId, "network_sse_text", {
+      textLength: text.length,
+      done: data.done === true,
+      activeStreamCount: Number(data.activeStreamCount) || current.activeStreamCount
+    })
+  }
+
+  if (data.done === true) {
+    current.sseDone = true
+    current.activeStreamCount = Math.max(0, Number(data.activeStreamCount) || current.activeStreamCount)
+    if (!text.trim()) {
+      void logWebSyncDebug(current.requestId, "network_sse_empty_done", {
+        activeStreamCount: current.activeStreamCount
+      })
+      return
+    }
+
+    scheduleNetworkFinal(current, text)
+  }
+}
 
 chrome.runtime.onMessage.addListener((message: WebSyncRunMessage | WebSyncAbortMessage, _sender, sendResponse) => {
   if (message?.type === "overleafgpt_web_sync_abort") {
@@ -38,12 +110,32 @@ chrome.runtime.onMessage.addListener((message: WebSyncRunMessage | WebSyncAbortM
 
   const controller = new AbortController()
   activeRequests.set(message.requestId, controller)
+  activeStreamState.set(message.requestId, {
+    requestId: message.requestId,
+    lastSentText: "",
+    lastSseText: "",
+    sseDone: false,
+    doneSent: false,
+    activeStreamCount: 0,
+    pendingFinalText: ""
+  })
 
   runWebSync(message, controller.signal)
-    .catch(error => sendBridgeMessage("overleafgpt_web_sync_error", message.requestId, {
-      error: error instanceof Error ? error.message : "WebSync request failed"
-    }))
-    .finally(() => activeRequests.delete(message.requestId))
+    .catch(error => {
+      if (controller.signal.aborted) {
+        void logWebSyncDebug(message.requestId, "content_aborted")
+        return
+      }
+      sendBridgeMessage("overleafgpt_web_sync_error", message.requestId, {
+        error: error instanceof Error ? error.message : "WebSync request failed"
+      })
+    })
+    .finally(() => {
+      const state = activeStreamState.get(message.requestId)
+      if (state) clearPendingNetworkFinal(state)
+      activeRequests.delete(message.requestId)
+      activeStreamState.delete(message.requestId)
+    })
 
   sendResponse({ ok: true })
   return true
@@ -52,10 +144,24 @@ chrome.runtime.onMessage.addListener((message: WebSyncRunMessage | WebSyncAbortM
 async function runWebSync(message: WebSyncRunMessage, signal: AbortSignal) {
   await waitForDocumentReady(signal)
 
-  const beforeCount = getAssistantNodes(message.target).length
+  const beforeNodes = getAssistantNodes(message.target)
+  const beforeCount = beforeNodes.length
+  const beforeText = getAssistantText(beforeNodes[beforeNodes.length - 1], message.target, {
+    closeCodeFences: false
+  })
+  await logWebSyncDebug(message.requestId, "content_run_start", {
+    target: message.target,
+    beforeCount,
+    beforeTextLength: beforeText.length
+  })
   await fillComposer(message.prompt, signal)
+  await logWebSyncDebug(message.requestId, "content_prompt_filled")
   await clickSend(message.target, beforeCount, signal)
-  await watchAssistantResponse(message.requestId, message.target, beforeCount, signal)
+  await logWebSyncDebug(message.requestId, "content_submitted")
+  await watchAssistantResponse(message.requestId, message.target, {
+    beforeCount,
+    beforeText
+  }, signal)
 }
 
 async function fillComposer(prompt: string, signal: AbortSignal) {
@@ -105,56 +211,203 @@ async function clickSend(target: WebSyncTarget, beforeCount: number, signal: Abo
 async function watchAssistantResponse(
   requestId: string,
   target: WebSyncTarget,
-  beforeCount: number,
+  before: {
+    beforeCount: number
+    beforeText: string
+  },
   signal: AbortSignal
 ) {
+  const streamState = activeStreamState.get(requestId)
   let lastText = ""
+  let lastSentText = ""
   let latestNode: HTMLElement | undefined
-  let stableTicks = 0
+  let lastChangedAt = Date.now()
+  let lastProgressAt = 0
   const startedAt = Date.now()
-  const minStableTicks = 4
+  const stableDoneMs = 1800
+  const stableFallbackMs = 10000
   const timeoutMs = 180000
 
   while (!signal.aborted) {
     await sleep(500, signal)
+    const now = Date.now()
+
+    if (streamState?.doneSent) {
+      return
+    }
+
+    if (now - lastProgressAt > 5000) {
+      lastProgressAt = now
+      sendBridgeMessage("overleafgpt_web_sync_progress", requestId, {
+        phase: lastText ? "receiving" : "waiting_response"
+      })
+    }
 
     const nodes = getAssistantNodes(target)
-    if (nodes.length <= beforeCount) {
+    const node = nodes[nodes.length - 1]
+    if (!node) {
       continue
     }
 
-    const node = nodes[nodes.length - 1]
-    latestNode = node
-    const generating = isGenerating()
     const text = getAssistantText(node, target, {
       closeCodeFences: false
     })
+    const hasNewNode = nodes.length > before.beforeCount
+    const hasChangedLatestNode = Boolean(text) && text !== before.beforeText
 
-    if (text && text !== lastText) {
-      lastText = text
-      stableTicks = 0
+    if (!hasNewNode && !hasChangedLatestNode) {
       continue
     }
 
-    if (lastText) {
-      stableTicks += 1
+    latestNode = node
+    const generating = isGenerating()
+
+    if (text && text !== lastText) {
+      lastText = text
+      lastChangedAt = Date.now()
+      await logWebSyncDebug(requestId, "content_text_changed", {
+        nodeCount: nodes.length,
+        textLength: text.length,
+        deltaLength: Math.max(0, text.length - lastSentText.length),
+        hasNewNode,
+        hasChangedLatestNode,
+        generating
+      })
+      if (text.startsWith(lastSentText)) {
+        const delta = text.slice(lastSentText.length)
+        if (delta) {
+          sendBridgeMessage("overleafgpt_web_sync_delta", requestId, { delta })
+          lastSentText = text
+        }
+      } else {
+        sendBridgeMessage("overleafgpt_web_sync_delta", requestId, {
+          delta: text,
+          replace: true
+        })
+        lastSentText = text
+      }
+      continue
     }
 
-    if (lastText && stableTicks >= minStableTicks && !generating) {
+    const stableForMs = Date.now() - lastChangedAt
+    const isDone = lastText && (
+      (!generating && stableForMs >= stableDoneMs) ||
+      stableForMs >= stableFallbackMs
+    )
+
+    if (isDone) {
       const finalText = getAssistantText(latestNode, target, {
         closeCodeFences: true
       }) || lastText
-      sendBridgeMessage("overleafgpt_web_sync_delta", requestId, { delta: finalText })
-      sendBridgeMessage("overleafgpt_web_sync_done", requestId)
+      await logWebSyncDebug(requestId, "content_done", {
+        finalTextLength: finalText.length,
+        stableForMs,
+        generating
+      })
+      if (streamState) clearPendingNetworkFinal(streamState)
+      await sendBridgeMessageAsync("overleafgpt_web_sync_delta", requestId, {
+        delta: finalText,
+        replace: true
+      })
+      if (!streamState?.doneSent) {
+        if (streamState) streamState.doneSent = true
+        sendBridgeMessage("overleafgpt_web_sync_done", requestId)
+      }
       return
     }
 
     if (Date.now() - startedAt > timeoutMs) {
+      await logWebSyncDebug(requestId, "content_timeout", {
+        nodeCount: nodes.length,
+        lastTextLength: lastText.length
+      })
       throw new Error("WebSync request timed out while waiting for the web chat response.")
     }
   }
 
   throw new Error("WebSync request aborted.")
+}
+
+function getCurrentStreamState() {
+  const states = Array.from(activeStreamState.values())
+  return states[states.length - 1]
+}
+
+function clearPendingNetworkFinal(state: { finalTimer?: ReturnType<typeof setTimeout> }) {
+  if (state.finalTimer) {
+    clearTimeout(state.finalTimer)
+    state.finalTimer = undefined
+  }
+}
+
+function scheduleNetworkFinal(
+  state: {
+    requestId: string
+    pendingFinalText: string
+    doneSent: boolean
+    activeStreamCount: number
+    finalTimer?: ReturnType<typeof setTimeout>
+  },
+  text: string
+) {
+  if (state.doneSent) return
+  state.pendingFinalText = text
+  clearPendingNetworkFinal(state)
+
+  state.finalTimer = setTimeout(() => {
+    if (state.doneSent) return
+    const finalText = normalizeFinalWebSyncText(state.pendingFinalText)
+    if (!finalText.trim()) return
+
+    void sendBridgeMessageAsync("overleafgpt_web_sync_delta", state.requestId, {
+      delta: finalText,
+      replace: true
+    }).then(() => {
+      if (state.doneSent) return
+      state.doneSent = true
+      sendBridgeMessage("overleafgpt_web_sync_done", state.requestId)
+      void logWebSyncDebug(state.requestId, "network_sse_done", {
+        textLength: finalText.length,
+        activeStreamCount: state.activeStreamCount,
+        settledForMs: NETWORK_FINAL_SETTLE_MS
+      })
+    })
+  }, NETWORK_FINAL_SETTLE_MS)
+}
+
+function normalizeFinalWebSyncText(text: string): string {
+  const normalized = text.replace(/\r\n/g, "\n").replace(/\n{4,}/g, "\n\n\n").trim()
+  const fenceMatches = normalized.match(/```/g)
+  if (fenceMatches && fenceMatches.length % 2 === 1) {
+    return `${normalized}\n\`\`\``
+  }
+  return normalized
+}
+
+function sendStreamingText(
+  state: {
+    requestId: string
+    lastSentText: string
+  },
+  text: string,
+  forceReplace: boolean
+) {
+  if (!text) return
+
+  if (!forceReplace && text.startsWith(state.lastSentText)) {
+    const delta = text.slice(state.lastSentText.length)
+    if (delta) {
+      sendBridgeMessage("overleafgpt_web_sync_delta", state.requestId, { delta })
+      state.lastSentText = text
+    }
+    return
+  }
+
+  sendBridgeMessage("overleafgpt_web_sync_delta", state.requestId, {
+    delta: text,
+    replace: true
+  })
+  state.lastSentText = text
 }
 
 function findComposer(): HTMLElement | null {
@@ -520,6 +773,38 @@ function sendBridgeMessage(type: string, requestId: string, payload: Record<stri
     requestId,
     ...payload
   })
+}
+
+function sendBridgeMessageAsync(type: string, requestId: string, payload: Record<string, unknown> = {}) {
+  return new Promise<void>((resolve) => {
+    chrome.runtime.sendMessage({
+      type,
+      requestId,
+      ...payload
+    }, () => resolve())
+  })
+}
+
+async function logWebSyncDebug(requestId: string, event: string, data: Record<string, unknown> = {}) {
+  try {
+    const entry = {
+      ts: new Date().toISOString(),
+      source: "content",
+      requestId,
+      event,
+      url: location.origin,
+      ...data
+    }
+    const stored = await chrome.storage.local.get(WEB_SYNC_DEBUG_STORAGE_KEY)
+    const current = Array.isArray(stored[WEB_SYNC_DEBUG_STORAGE_KEY])
+      ? stored[WEB_SYNC_DEBUG_STORAGE_KEY]
+      : []
+    await chrome.storage.local.set({
+      [WEB_SYNC_DEBUG_STORAGE_KEY]: [...current.slice(-199), entry]
+    })
+  } catch {
+    // Debug logging must never break WebSync.
+  }
 }
 
 function waitForDocumentReady(signal: AbortSignal): Promise<void> {

@@ -132,6 +132,13 @@ function stripCommandCodeFences(content: string): string {
   return result
 }
 
+function normalizeCommandMarkers(content: string): string {
+  return content.replace(
+    /(?:<<<|&lt;&lt;&lt;|&#60;&#60;&#60;)\s*([A-Za-z_]+)\s*(?:>>>|&gt;&gt;&gt;|&#62;&#62;&#62;)/g,
+    (_match, tag) => `<<<${String(tag).toUpperCase()}>>>`
+  )
+}
+
 /**
  * 生成基于内容的稳定 ID
  * 使用文件路径和搜索内容生成确定性的 ID
@@ -380,7 +387,8 @@ function extractTagContent(text: string, tag: string): string | null {
  */
 export function parseReplaceCommands(content: string): ParseResult {
   const commands: ReplaceCommand[] = []
-  const sanitizedContent = stripCommandCodeFences(content)
+  const normalizedContent = normalizeCommandMarkers(content)
+  const sanitizedContent = stripCommandCodeFences(normalizedContent)
   let cleanContent = sanitizedContent
   const processedIds = new Set<string>()
   
@@ -456,17 +464,18 @@ export function parseReplaceCommands(content: string): ParseResult {
  * 检查文本中是否包含替换/插入指令
  */
 export function hasReplaceCommands(content: string): boolean {
+  const normalizedContent = normalizeCommandMarkers(content)
   REPLACE_BLOCK_NEW_FORMAT.lastIndex = 0
   REPLACE_BLOCK_OLD_FORMAT.lastIndex = 0
   REPLACE_BLOCK_REGEX_MODE.lastIndex = 0
   INSERT_BLOCK_PATTERN.lastIndex = 0
   CREATE_FILE_BLOCK.lastIndex = 0
   return (
-    REPLACE_BLOCK_NEW_FORMAT.test(content) || 
-    REPLACE_BLOCK_OLD_FORMAT.test(content) || 
-    REPLACE_BLOCK_REGEX_MODE.test(content) ||
-    INSERT_BLOCK_PATTERN.test(content) ||
-    CREATE_FILE_BLOCK.test(content)
+    REPLACE_BLOCK_NEW_FORMAT.test(normalizedContent) || 
+    REPLACE_BLOCK_OLD_FORMAT.test(normalizedContent) || 
+    REPLACE_BLOCK_REGEX_MODE.test(normalizedContent) ||
+    INSERT_BLOCK_PATTERN.test(normalizedContent) ||
+    CREATE_FILE_BLOCK.test(normalizedContent)
   )
 }
 
